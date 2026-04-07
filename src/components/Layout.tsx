@@ -1,4 +1,5 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 const navItems = [
   { to: "/", label: "Dashboard" },
@@ -7,6 +8,14 @@ const navItems = [
 ];
 
 export default function Layout() {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  function handleLogout() {
+    logout();
+    navigate("/login");
+  }
+
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
       <nav className="border-b border-gray-800 bg-gray-950/80 backdrop-blur sticky top-0 z-10">
@@ -15,7 +24,7 @@ export default function Layout() {
             <span className="text-lg font-semibold tracking-tight">
               vinctum
             </span>
-            <div className="flex gap-1">
+            <div className="flex items-center gap-1">
               {navItems.map((item) => (
                 <NavLink
                   key={item.to}
@@ -31,6 +40,15 @@ export default function Layout() {
                   {item.label}
                 </NavLink>
               ))}
+              <div className="ml-4 pl-4 border-l border-gray-800 flex items-center gap-3">
+                <span className="text-sm text-gray-400">{user?.username}</span>
+                <button
+                  onClick={handleLogout}
+                  className="px-3 py-1.5 rounded-md text-sm text-gray-400 hover:text-red-400 hover:bg-gray-800 transition-colors"
+                >
+                  Logout
+                </button>
+              </div>
             </div>
           </div>
         </div>
