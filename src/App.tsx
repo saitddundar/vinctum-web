@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Layout from "./components/Layout";
@@ -9,6 +9,8 @@ import CheckEmail from "./pages/CheckEmail";
 import Dashboard from "./pages/Dashboard";
 import Nodes from "./pages/Nodes";
 import Anomalies from "./pages/Anomalies";
+import Devices from "./pages/Devices";
+import Sessions from "./pages/Sessions";
 
 export default function App() {
   return (
@@ -24,8 +26,11 @@ export default function App() {
               <Route path="/" element={<Dashboard />} />
               <Route path="/nodes" element={<Nodes />} />
               <Route path="/anomalies" element={<Anomalies />} />
+              <Route path="/devices" element={<Devices />} />
+              <Route path="/sessions" element={<Sessions />} />
             </Route>
           </Route>
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AuthProvider>
     </BrowserRouter>
