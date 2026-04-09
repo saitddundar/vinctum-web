@@ -44,6 +44,11 @@ export default function Devices() {
   const [redeemCode, setRedeemCode] = useState("");
   const [redeemName, setRedeemName] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
+  const [fpPreview, setFpPreview] = useState("");
+
+  useEffect(() => {
+    getDeviceFingerprint().then((fp) => setFpPreview(fp));
+  }, []);
 
   const pendingDevices = devices.filter((d) => !d.is_approved && !d.is_revoked);
 
@@ -75,10 +80,11 @@ export default function Devices() {
   async function handleAddThisDevice() {
     if (!addName) return;
     setActionLoading(true);
+    const fp = await getDeviceFingerprint();
     await registerDevice({
       name: addName,
       device_type: guessDeviceType(),
-      fingerprint: getDeviceFingerprint(),
+      fingerprint: fp,
     });
     await fetchDevices();
     setModal(null);
@@ -100,11 +106,12 @@ export default function Devices() {
   async function handleRedeemCode() {
     if (!redeemCode || !redeemName) return;
     setActionLoading(true);
+    const fp = await getDeviceFingerprint();
     await redeemPairingCode({
       pairing_code: redeemCode,
       name: redeemName,
       device_type: guessDeviceType(),
-      fingerprint: getDeviceFingerprint(),
+      fingerprint: fp,
     });
     await fetchDevices();
     setModal(null);
@@ -265,7 +272,7 @@ export default function Devices() {
                   className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
                 />
                 <p className="text-xs text-gray-500">
-                  Type: {guessDeviceType()} | Fingerprint: {getDeviceFingerprint().slice(0, 12)}...
+                  Type: {guessDeviceType()} | Fingerprint: {fpPreview.slice(0, 12)}...
                 </p>
                 <div className="flex gap-2 justify-end">
                   <button onClick={() => setModal(null)} className="px-4 py-2 rounded-lg text-sm text-gray-400 hover:text-white transition-colors">

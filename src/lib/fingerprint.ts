@@ -1,4 +1,4 @@
-export function getDeviceFingerprint(): string {
+export async function getDeviceFingerprint(): Promise<string> {
   const parts = [
     navigator.userAgent,
     navigator.language,
@@ -9,12 +9,10 @@ export function getDeviceFingerprint(): string {
     navigator.platform,
   ];
   const str = parts.join("|");
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const chr = str.charCodeAt(i);
-    hash = ((hash << 5) - hash + chr) | 0;
-  }
-  return "fp-" + Math.abs(hash).toString(36);
+  const encoded = new TextEncoder().encode(str);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", encoded);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return "fp-" + hashArray.map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 32);
 }
 
 export function guessDeviceType(): "pc" | "phone" | "tablet" {
