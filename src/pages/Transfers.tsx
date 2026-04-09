@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import type { Device } from "../types/device";
 import type { TransferInfo, TransferStatus } from "../types/transfer";
 import { listDevices } from "../lib/device-api";
-import { initiateTransfer, listTransfers, cancelTransfer, getTransferStatus } from "../lib/transfer-api";
+import { initiateTransfer, listTransfers, cancelTransfer, getTransferStatus, uploadFile } from "../lib/transfer-api";
 
 const statusConfig: Record<TransferStatus, { label: string; color: string; dot: string }> = {
   TRANSFER_STATUS_UNSPECIFIED: { label: "Unknown", color: "text-gray-400", dot: "bg-gray-400" },
@@ -60,6 +60,7 @@ export default function Transfers() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [targetDevice, setTargetDevice] = useState("");
   const [sending, setSending] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ sent: number; total: number } | null>(null);
 
   const myDevice = devices.find((d) => d.is_approved && !d.is_revoked);
 
@@ -118,6 +119,7 @@ export default function Transfers() {
   async function handleSend() {
     if (!selectedFile || !targetDevice || !myDevice?.node_id) return;
     setSending(true);
+    setUploadProgress(null);
     setError("");
 
     try {
@@ -133,22 +135,33 @@ export default function Transfers() {
 
       const target = devices.find((d) => d.device_id === targetDevice);
 
-      await initiateTransfer({
+      // Step 1: Initiate transfer
+      const transfer = await initiateTransfer({
         sender_node_id: myDevice.node_id,
         receiver_node_id: target?.node_id || "",
         filename: selectedFile.name,
         total_size_bytes: selectedFile.size,
         content_hash: contentHash,
         encryption_key: encryptionKey,
-        chunk_size_bytes: 262144, // 256KB
+        chunk_size_bytes: 262144,
       });
 
       setShowSend(false);
+
+      // Step 2: Upload chunks
+      setUploadProgress({ sent: 0, total: transfer.total_chunks });
+
+      await uploadFile(transfer.transfer_id, selectedFile, (sent, total) => {
+        setUploadProgress({ sent, total });
+      });
+
+      setUploadProgress(null);
       setSelectedFile(null);
       setTargetDevice("");
       await fetchData();
     } catch (err: any) {
-      setError(err?.response?.data?.error || "Failed to initiate transfer");
+      setError(err?.response?.data?.error || "Failed to send file");
+      setUploadProgress(null);
     } finally {
       setSending(false);
     }
@@ -221,6 +234,28 @@ export default function Transfers() {
         <div className="rounded-lg border border-red-800 bg-red-900/30 px-4 py-3 flex items-center justify-between">
           <p className="text-sm text-red-300">{error}</p>
           <button onClick={() => setError("")} className="text-red-400 hover:text-red-300 text-xs">Dismiss</button>
+        </div>
+      )}
+
+      {/* Upload progress banner */}
+      {uploadProgress && (
+        <div className="rounded-lg border border-blue-800 bg-blue-900/20 px-4 py-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-blue-300 flex items-center gap-2">
+              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              Uploading chunks...
+            </p>
+            <span className="text-xs text-blue-400">{uploadProgress.sent} / {uploadProgress.total}</span>
+          </div>
+          <div className="w-full bg-gray-800 rounded-full h-2">
+            <div
+              className="h-2 rounded-full bg-blue-500 transition-all duration-300"
+              style={{ width: `${uploadProgress.total > 0 ? (uploadProgress.sent / uploadProgress.total) * 100 : 0}%` }}
+            />
+          </div>
         </div>
       )}
 
