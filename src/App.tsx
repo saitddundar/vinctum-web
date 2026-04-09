@@ -11,6 +11,7 @@ import Nodes from "./pages/Nodes";
 import Anomalies from "./pages/Anomalies";
 import Devices from "./pages/Devices";
 import Sessions from "./pages/Sessions";
+import Transfers from "./pages/Transfers";
 
 export default function App() {
   return (
@@ -28,6 +29,7 @@ export default function App() {
               <Route path="/anomalies" element={<Anomalies />} />
               <Route path="/devices" element={<Devices />} />
               <Route path="/sessions" element={<Sessions />} />
+              <Route path="/transfers" element={<Transfers />} />
             </Route>
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
