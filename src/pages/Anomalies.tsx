@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { generateMockAnomalies, type MockAnomaly } from "../lib/mock-data";
+import { fetchAnomalies } from "../lib/ml-api";
+import type { MockAnomaly } from "../lib/mock-data";
 
 const severityBadge = {
   critical: "bg-red-900/50 text-red-300 border-red-800",
@@ -31,11 +32,9 @@ export default function Anomalies() {
   const [search, setSearch] = useState("");
 
   useEffect(() => {
-    const t = setTimeout(() => {
-      setAnomalies(generateMockAnomalies());
-      setLoading(false);
-    }, 500);
-    return () => clearTimeout(t);
+    fetchAnomalies()
+      .then(setAnomalies)
+      .finally(() => setLoading(false));
   }, []);
 
   const filtered = anomalies

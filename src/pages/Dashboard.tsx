@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { generateMockNodes, generateMockAnomalies, type MockNode, type MockAnomaly } from "../lib/mock-data";
+import { fetchNodes, fetchAnomalies } from "../lib/ml-api";
+import type { MockNode, MockAnomaly } from "../lib/mock-data";
 
 const severityColor = {
   critical: "bg-red-900/50 text-red-300 border-red-800",
@@ -30,13 +31,12 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Simulate API fetch
-    const t = setTimeout(() => {
-      setNodes(generateMockNodes());
-      setAnomalies(generateMockAnomalies());
-      setLoading(false);
-    }, 600);
-    return () => clearTimeout(t);
+    Promise.all([fetchNodes(), fetchAnomalies()])
+      .then(([n, a]) => {
+        setNodes(n);
+        setAnomalies(a);
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   const stats = useMemo(() => {

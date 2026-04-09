@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { generateMockNodes, type MockNode } from "../lib/mock-data";
+import { fetchNodes } from "../lib/ml-api";
+import type { MockNode } from "../lib/mock-data";
 
 const statusBadge = {
   good: "bg-emerald-900/50 text-emerald-300 border-emerald-800",
@@ -25,11 +26,9 @@ export default function Nodes() {
   const [selected, setSelected] = useState<MockNode | null>(null);
 
   useEffect(() => {
-    const t = setTimeout(() => {
-      setNodes(generateMockNodes());
-      setLoading(false);
-    }, 500);
-    return () => clearTimeout(t);
+    fetchNodes()
+      .then(setNodes)
+      .finally(() => setLoading(false));
   }, []);
 
   const statusOrder = { good: 0, average: 1, unstable: 2, bad: 3 };
