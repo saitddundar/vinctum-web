@@ -92,7 +92,7 @@ export async function downloadChunks(
 }
 
 /**
- * Hash a chunk with SHA-256 and return hex string.
+ * Hash bytes with SHA-256 and return hex string.
  */
 export async function hashChunk(data: ArrayBuffer): Promise<string> {
   const hashBuffer = await crypto.subtle.digest("SHA-256", data);
@@ -100,15 +100,62 @@ export async function hashChunk(data: ArrayBuffer): Promise<string> {
   return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+// ─── E2E key helpers ─────────────────────────────────────
+
+/**
+ * Generates a fresh AES-256-GCM key for a transfer. The key never leaves the
+ * browser; only the sender and receiver hold it.
+ */
+export async function generateE2EKey(): Promise<CryptoKey> {
+  return crypto.subtle.generateKey(
+    { name: "AES-GCM", length: 256 },
+    true,
+    ["encrypt", "decrypt"],
+  );
+}
+
+/**
+ * Exports a CryptoKey to a base64 string for sharing out-of-band.
+ */
+export async function exportKeyBase64(key: CryptoKey): Promise<string> {
+  const raw = await crypto.subtle.exportKey("raw", key);
+  return btoa(String.fromCharCode(...new Uint8Array(raw)));
+}
+
+/**
+ * Imports a base64 key string back into a CryptoKey for decryption.
+ */
+export async function importKeyBase64(b64: string): Promise<CryptoKey> {
+  const binary = atob(b64);
+  const raw = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) raw[i] = binary.charCodeAt(i);
+  return crypto.subtle.importKey("raw", raw, "AES-GCM", true, ["encrypt", "decrypt"]);
+}
+
+/**
+ * Encrypts a chunk with AES-256-GCM. Returns nonce(12) || ciphertext, matching
+ * the layout the receiver decoder expects.
+ */
+async function encryptChunk(key: CryptoKey, plaintext: ArrayBuffer): Promise<Uint8Array> {
+  const nonce = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce }, key, plaintext);
+  const out = new Uint8Array(nonce.length + ct.byteLength);
+  out.set(nonce, 0);
+  out.set(new Uint8Array(ct), nonce.length);
+  return out;
+}
+
 const CHUNK_SIZE = 256 * 1024; // 256 KB
 
 /**
- * Uploads an entire file by chunking it, hashing each chunk, and uploading sequentially.
- * Returns transfer status after all chunks are uploaded.
+ * Uploads an entire file by chunking, encrypting client-side with AES-256-GCM,
+ * hashing the ciphertext for transport integrity, and uploading sequentially.
+ * The encryption key never reaches the server.
  */
 export async function uploadFile(
   transferId: string,
   file: File,
+  encryptionKey: CryptoKey,
   onProgress?: (chunksSent: number, totalChunks: number) => void,
 ): Promise<void> {
   const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
@@ -116,10 +163,11 @@ export async function uploadFile(
   for (let i = 0; i < totalChunks; i++) {
     const start = i * CHUNK_SIZE;
     const end = Math.min(start + CHUNK_SIZE, file.size);
-    const slice = await file.slice(start, end).arrayBuffer();
-    const hash = await hashChunk(slice);
+    const plaintext = await file.slice(start, end).arrayBuffer();
+    const ciphertext = await encryptChunk(encryptionKey, plaintext);
+    const hash = await hashChunk(ciphertext.buffer.slice(ciphertext.byteOffset, ciphertext.byteOffset + ciphertext.byteLength));
 
-    await uploadChunk(transferId, i, slice, hash);
+    await uploadChunk(transferId, i, ciphertext.buffer.slice(ciphertext.byteOffset, ciphertext.byteOffset + ciphertext.byteLength), hash);
 
     if (onProgress) {
       onProgress(i + 1, totalChunks);

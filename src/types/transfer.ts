@@ -12,7 +12,8 @@ export interface InitiateTransferRequest {
   filename: string;
   total_size_bytes: number;
   content_hash: string;
-  encryption_key: string;
+  // encryption_key intentionally omitted: chunks are E2E encrypted client-side
+  // and the key never leaves the browser. The server rejects this field.
   chunk_size_bytes?: number;
   replication_factor?: number;
 }

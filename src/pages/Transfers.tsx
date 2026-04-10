@@ -2,7 +2,15 @@ import { useEffect, useState, useCallback } from "react";
 import type { Device } from "../types/device";
 import type { TransferInfo, TransferStatus } from "../types/transfer";
 import { listDevices } from "../lib/device-api";
-import { initiateTransfer, listTransfers, cancelTransfer, getTransferStatus, uploadFile } from "../lib/transfer-api";
+import {
+  initiateTransfer,
+  listTransfers,
+  cancelTransfer,
+  getTransferStatus,
+  uploadFile,
+  generateE2EKey,
+  exportKeyBase64,
+} from "../lib/transfer-api";
 
 const statusConfig: Record<TransferStatus, { label: string; color: string; dot: string }> = {
   TRANSFER_STATUS_UNSPECIFIED: { label: "Unknown", color: "text-gray-400", dot: "bg-gray-400" },
@@ -61,6 +69,7 @@ export default function Transfers() {
   const [targetDevice, setTargetDevice] = useState("");
   const [sending, setSending] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ sent: number; total: number } | null>(null);
+  const [shareKey, setShareKey] = useState<{ transferId: string; key: string } | null>(null);
 
   const myDevice = devices.find((d) => d.is_approved && !d.is_revoked);
 
@@ -123,35 +132,43 @@ export default function Transfers() {
     setError("");
 
     try {
-      // Generate content hash from file
+      // Plaintext content hash — receiver verifies after decrypting locally.
       const buffer = await selectedFile.arrayBuffer();
       const hashBuffer = await crypto.subtle.digest("SHA-256", buffer);
       const hashArray = Array.from(new Uint8Array(hashBuffer));
       const contentHash = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
 
-      // Generate E2E encryption key
-      const key = crypto.getRandomValues(new Uint8Array(32));
-      const encryptionKey = btoa(String.fromCharCode(...key));
+      // Generate the E2E key locally; it never leaves the browser.
+      const cryptoKey = await generateE2EKey();
+      const exportedKey = await exportKeyBase64(cryptoKey);
 
       const target = devices.find((d) => d.device_id === targetDevice);
 
-      // Step 1: Initiate transfer
+      // Step 1: Initiate transfer (no encryption_key — server would reject it).
       const transfer = await initiateTransfer({
         sender_node_id: myDevice.node_id,
         receiver_node_id: target?.node_id || "",
         filename: selectedFile.name,
         total_size_bytes: selectedFile.size,
         content_hash: contentHash,
-        encryption_key: encryptionKey,
         chunk_size_bytes: 262144,
       });
 
-      setShowSend(false);
+      // Persist the key locally so the sender can re-share it later, and
+      // surface it in the UI for out-of-band delivery to the receiver.
+      try {
+        localStorage.setItem(`vinctum_transfer_key_${transfer.transfer_id}`, exportedKey);
+      } catch {
+        // localStorage may be unavailable; not fatal.
+      }
 
-      // Step 2: Upload chunks
+      setShowSend(false);
+      setShareKey({ transferId: transfer.transfer_id, key: exportedKey });
+
+      // Step 2: Encrypt + upload chunks.
       setUploadProgress({ sent: 0, total: transfer.total_chunks });
 
-      await uploadFile(transfer.transfer_id, selectedFile, (sent, total) => {
+      await uploadFile(transfer.transfer_id, selectedFile, cryptoKey, (sent, total) => {
         setUploadProgress({ sent, total });
       });
 
@@ -395,6 +412,48 @@ export default function Transfers() {
             <p className="text-xs text-gray-600 mt-1">Send a file to another device to get started</p>
           </div>
         )
+      )}
+
+      {/* Share key modal — shown after a successful initiate so the sender can
+          deliver the AES key out-of-band to the recipient. */}
+      {shareKey && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShareKey(null)}>
+          <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 w-full max-w-md space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div>
+              <h2 className="text-lg font-medium">Share decryption key</h2>
+              <p className="text-sm text-gray-500 mt-1">Send this key to the recipient over a trusted channel. The server never sees it.</p>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-2">AES-256-GCM key (base64)</label>
+              <textarea
+                readOnly
+                value={shareKey.key}
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 text-xs text-emerald-300 font-mono break-all resize-none"
+                rows={3}
+              />
+            </div>
+            <div className="flex items-start gap-2 bg-yellow-900/20 border border-yellow-800/50 rounded-lg px-3 py-2">
+              <svg className="w-4 h-4 text-yellow-400 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m0-10.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.333 9-6.03 9-11.623 0-1.31-.21-2.571-.598-3.749h-.152c-3.196 0-6.1-1.248-8.25-3.285zm0 13.036h.008v.008H12v-.008z" />
+              </svg>
+              <p className="text-xs text-yellow-200">If you lose this key, the file cannot be decrypted. It is also saved locally in this browser.</p>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => navigator.clipboard?.writeText(shareKey.key)}
+                className="px-4 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-sm text-gray-200 transition-colors"
+              >
+                Copy
+              </button>
+              <button
+                onClick={() => setShareKey(null)}
+                className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-sm font-medium transition-colors"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Send File Modal */}
