@@ -1,4 +1,32 @@
-export type DeviceType = "pc" | "phone" | "tablet";
+export type DeviceTypeShort = "pc" | "phone" | "tablet";
+export type DeviceTypeProto =
+  | "DEVICE_TYPE_UNSPECIFIED"
+  | "DEVICE_TYPE_PC"
+  | "DEVICE_TYPE_PHONE"
+  | "DEVICE_TYPE_TABLET";
+export type DeviceType = DeviceTypeShort | DeviceTypeProto;
+
+const protoToShort: Record<string, DeviceTypeShort> = {
+  DEVICE_TYPE_PC: "pc",
+  DEVICE_TYPE_PHONE: "phone",
+  DEVICE_TYPE_TABLET: "tablet",
+  DEVICE_TYPE_UNSPECIFIED: "pc",
+};
+
+const shortToProto: Record<DeviceTypeShort, DeviceTypeProto> = {
+  pc: "DEVICE_TYPE_PC",
+  phone: "DEVICE_TYPE_PHONE",
+  tablet: "DEVICE_TYPE_TABLET",
+};
+
+export function normalizeDeviceType(t: DeviceType): DeviceTypeShort {
+  if (t in protoToShort) return protoToShort[t];
+  return t as DeviceTypeShort;
+}
+
+export function toProtoDeviceType(t: DeviceTypeShort): DeviceTypeProto {
+  return shortToProto[t];
+}
 
 export interface Device {
   device_id: string;

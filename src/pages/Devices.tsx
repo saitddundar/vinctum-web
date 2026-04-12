@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Device } from "../types/device";
+import { normalizeDeviceType, toProtoDeviceType } from "../types/device";
 import {
   listDevices,
   registerDevice,
@@ -53,9 +54,14 @@ export default function Devices() {
   const pendingDevices = devices.filter((d) => !d.is_approved && !d.is_revoked);
 
   async function fetchDevices() {
-    const res = await listDevices();
-    setDevices(res.devices);
-    setLoading(false);
+    try {
+      const res = await listDevices();
+      setDevices(res.devices);
+    } catch (err) {
+      console.error("Failed to fetch devices:", err);
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -80,60 +86,86 @@ export default function Devices() {
   async function handleAddThisDevice() {
     if (!addName) return;
     setActionLoading(true);
-    const fp = await getDeviceFingerprint();
-    await registerDevice({
-      name: addName,
-      device_type: guessDeviceType(),
-      fingerprint: fp,
-    });
-    await fetchDevices();
-    setModal(null);
-    setAddName("");
-    setActionLoading(false);
+    try {
+      const fp = await getDeviceFingerprint();
+      await registerDevice({
+        name: addName,
+        device_type: toProtoDeviceType(guessDeviceType()),
+        fingerprint: fp,
+      });
+      await fetchDevices();
+      setModal(null);
+      setAddName("");
+    } catch (err) {
+      console.error("Failed to add device:", err);
+      alert("Failed to add device. Is the backend running?");
+    } finally {
+      setActionLoading(false);
+    }
   }
 
   async function handleGeneratePairingCode() {
     const myDevice = devices.find((d) => d.is_approved);
     if (!myDevice) return;
     setActionLoading(true);
-    const res = await generatePairingCode(myDevice.device_id);
-    setPairingCode(res.pairing_code);
-    setPairingExpiry(res.expires_in_s);
-    setModal("pairing-generate");
-    setActionLoading(false);
+    try {
+      const res = await generatePairingCode(myDevice.device_id);
+      setPairingCode(res.pairing_code);
+      setPairingExpiry(res.expires_in_s);
+      setModal("pairing-generate");
+    } catch (err) {
+      console.error("Failed to generate pairing code:", err);
+      alert("Failed to generate pairing code.");
+    } finally {
+      setActionLoading(false);
+    }
   }
 
   async function handleRedeemCode() {
     if (!redeemCode || !redeemName) return;
     setActionLoading(true);
-    const fp = await getDeviceFingerprint();
-    await redeemPairingCode({
-      pairing_code: redeemCode,
-      name: redeemName,
-      device_type: guessDeviceType(),
-      fingerprint: fp,
-    });
-    await fetchDevices();
-    setModal(null);
-    setRedeemCode("");
-    setRedeemName("");
-    setActionLoading(false);
+    try {
+      const fp = await getDeviceFingerprint();
+      await redeemPairingCode({
+        pairing_code: redeemCode,
+        name: redeemName,
+        device_type: toProtoDeviceType(guessDeviceType()),
+        fingerprint: fp,
+      });
+      await fetchDevices();
+      setModal(null);
+      setRedeemCode("");
+      setRedeemName("");
+    } catch (err) {
+      console.error("Failed to redeem code:", err);
+      alert("Failed to redeem pairing code.");
+    } finally {
+      setActionLoading(false);
+    }
   }
 
   async function handleApprove(pendingId: string, approve: boolean) {
     const myDevice = devices.find((d) => d.is_approved);
     if (!myDevice) return;
-    await approvePairing({
-      approver_device_id: myDevice.device_id,
-      pending_device_id: pendingId,
-      approve,
-    });
-    await fetchDevices();
+    try {
+      await approvePairing({
+        approver_device_id: myDevice.device_id,
+        pending_device_id: pendingId,
+        approve,
+      });
+      await fetchDevices();
+    } catch (err) {
+      console.error("Failed to approve/reject device:", err);
+    }
   }
 
   async function handleRevoke(deviceId: string) {
-    await revokeDevice(deviceId);
-    await fetchDevices();
+    try {
+      await revokeDevice(deviceId);
+      await fetchDevices();
+    } catch (err) {
+      console.error("Failed to revoke device:", err);
+    }
   }
 
   if (loading) {
@@ -183,10 +215,10 @@ export default function Devices() {
             <div key={d.device_id} className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <svg className="w-5 h-5 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d={typeIcon[d.device_type]} />
+                  <path strokeLinecap="round" strokeLinejoin="round" d={typeIcon[normalizeDeviceType(d.device_type)]} />
                 </svg>
                 <span className="text-sm text-gray-200">{d.name}</span>
-                <span className={`text-xs px-2 py-0.5 rounded border ${typeBadge[d.device_type]}`}>{d.device_type}</span>
+                <span className={`text-xs px-2 py-0.5 rounded border ${typeBadge[normalizeDeviceType(d.device_type)]}`}>{normalizeDeviceType(d.device_type)}</span>
               </div>
               <div className="flex gap-2">
                 <button
@@ -226,13 +258,13 @@ export default function Devices() {
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-3">
                     <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d={typeIcon[d.device_type]} />
+                      <path strokeLinecap="round" strokeLinejoin="round" d={typeIcon[normalizeDeviceType(d.device_type)]} />
                     </svg>
                     <span className="text-gray-200">{d.name}</span>
                   </div>
                 </td>
                 <td className="px-4 py-3">
-                  <span className={`text-xs px-2 py-0.5 rounded border ${typeBadge[d.device_type]}`}>{d.device_type}</span>
+                  <span className={`text-xs px-2 py-0.5 rounded border ${typeBadge[normalizeDeviceType(d.device_type)]}`}>{normalizeDeviceType(d.device_type)}</span>
                 </td>
                 <td className="px-4 py-3">
                   {d.is_approved ? (

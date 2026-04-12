@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { PeerSession, Device } from "../types/device";
+import { normalizeDeviceType } from "../types/device";
 import {
   listPeerSessions,
   createPeerSession,
@@ -180,7 +181,7 @@ export default function Sessions() {
                     className="sr-only"
                   />
                   <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d={typeIcon[d.device_type] || typeIcon.pc} />
+                    <path strokeLinecap="round" strokeLinejoin="round" d={typeIcon[normalizeDeviceType(d.device_type)] || typeIcon.pc} />
                   </svg>
                   <span className="text-sm text-gray-200">{d.name}</span>
                 </label>
@@ -261,7 +262,7 @@ export default function Sessions() {
                           className="sr-only"
                         />
                         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d={typeIcon[d.device_type] || typeIcon.pc} />
+                          <path strokeLinecap="round" strokeLinejoin="round" d={typeIcon[normalizeDeviceType(d.device_type)] || typeIcon.pc} />
                         </svg>
                         {d.name}
                       </label>
@@ -282,11 +283,11 @@ export default function Sessions() {
                 {session.devices.map((d) => (
                   <div key={d.device_id} className="flex items-center gap-3 rounded-lg border border-gray-800 bg-gray-800/50 px-4 py-3">
                     <svg className="w-5 h-5 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d={typeIcon[d.device_type] || typeIcon.pc} />
+                      <path strokeLinecap="round" strokeLinejoin="round" d={typeIcon[normalizeDeviceType(d.device_type)] || typeIcon.pc} />
                     </svg>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm text-gray-200 truncate">{d.name}</p>
-                      <p className="text-xs text-gray-500">{d.device_type} | {timeAgo(d.last_active)}</p>
+                      <p className="text-xs text-gray-500">{normalizeDeviceType(d.device_type)} | {timeAgo(d.last_active)}</p>
                     </div>
                     <button
                       onClick={() => handleLeave(session.session_id, d.device_id)}
