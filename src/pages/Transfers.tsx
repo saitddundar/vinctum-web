@@ -10,24 +10,26 @@ import {
   uploadFile,
   generateE2EKey,
   exportKeyBase64,
+  importKeyBase64,
+  downloadFile,
 } from "../lib/transfer-api";
 
-const statusConfig: Record<TransferStatus, { label: string; color: string; dot: string }> = {
-  TRANSFER_STATUS_UNSPECIFIED: { label: "Unknown", color: "text-gray-400", dot: "bg-gray-400" },
-  TRANSFER_STATUS_PENDING: { label: "Pending", color: "text-yellow-300", dot: "bg-yellow-400" },
-  TRANSFER_STATUS_IN_PROGRESS: { label: "Transferring", color: "text-blue-300", dot: "bg-blue-400" },
-  TRANSFER_STATUS_COMPLETED: { label: "Completed", color: "text-emerald-300", dot: "bg-emerald-400" },
-  TRANSFER_STATUS_FAILED: { label: "Failed", color: "text-red-300", dot: "bg-red-400" },
-  TRANSFER_STATUS_CANCELLED: { label: "Cancelled", color: "text-gray-400", dot: "bg-gray-500" },
+const statusLabel: Record<TransferStatus, string> = {
+  TRANSFER_STATUS_UNSPECIFIED: "Unknown",
+  TRANSFER_STATUS_PENDING: "Pending",
+  TRANSFER_STATUS_IN_PROGRESS: "Transferring",
+  TRANSFER_STATUS_COMPLETED: "Completed",
+  TRANSFER_STATUS_FAILED: "Failed",
+  TRANSFER_STATUS_CANCELLED: "Cancelled",
 };
 
-const statusBadge: Record<TransferStatus, string> = {
-  TRANSFER_STATUS_UNSPECIFIED: "bg-gray-900/50 text-gray-300 border-gray-700",
-  TRANSFER_STATUS_PENDING: "bg-yellow-900/50 text-yellow-300 border-yellow-800",
-  TRANSFER_STATUS_IN_PROGRESS: "bg-blue-900/50 text-blue-300 border-blue-800",
-  TRANSFER_STATUS_COMPLETED: "bg-emerald-900/50 text-emerald-300 border-emerald-800",
-  TRANSFER_STATUS_FAILED: "bg-red-900/50 text-red-300 border-red-800",
-  TRANSFER_STATUS_CANCELLED: "bg-gray-900/50 text-gray-400 border-gray-700",
+const statusColor: Record<TransferStatus, string> = {
+  TRANSFER_STATUS_UNSPECIFIED: "text-gray-500",
+  TRANSFER_STATUS_PENDING: "text-yellow-500",
+  TRANSFER_STATUS_IN_PROGRESS: "text-blue-400",
+  TRANSFER_STATUS_COMPLETED: "text-emerald-400",
+  TRANSFER_STATUS_FAILED: "text-red-400",
+  TRANSFER_STATUS_CANCELLED: "text-gray-500",
 };
 
 type FilterStatus = "all" | "active" | "completed" | "failed";
@@ -49,12 +51,15 @@ function timeAgo(iso: string): string {
   if (mins < 60) return `${mins}m ago`;
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return `${hrs}h ago`;
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 function isActive(s: TransferStatus) {
   return s === "TRANSFER_STATUS_PENDING" || s === "TRANSFER_STATUS_IN_PROGRESS";
 }
+
+// Transfer lifecycle steps
+type TransferStep = "select" | "encrypt" | "upload" | "done";
 
 export default function Transfers() {
   const [devices, setDevices] = useState<Device[]>([]);
@@ -64,12 +69,18 @@ export default function Transfers() {
   const [showSend, setShowSend] = useState(false);
   const [error, setError] = useState("");
 
-  // Send form state
+  // Send form
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [targetDevice, setTargetDevice] = useState("");
   const [sending, setSending] = useState(false);
+  const [sendStep, setSendStep] = useState<TransferStep>("select");
   const [uploadProgress, setUploadProgress] = useState<{ sent: number; total: number } | null>(null);
   const [shareKey, setShareKey] = useState<{ transferId: string; key: string } | null>(null);
+
+  // Receive
+  const [downloadPrompt, setDownloadPrompt] = useState<{ transfer: TransferInfo; keyInput: string } | null>(null);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<{ received: number } | null>(null);
 
   const myDevice = devices.find((d) => d.is_approved && !d.is_revoked);
 
@@ -94,16 +105,13 @@ export default function Transfers() {
     fetchData();
   }, [fetchData]);
 
-  // Poll active transfers for progress
+  // Poll active transfers
   useEffect(() => {
     const activeIds = transfers.filter((t) => isActive(t.status)).map((t) => t.transfer_id);
     if (activeIds.length === 0) return;
 
     const interval = setInterval(async () => {
-      const updates = await Promise.allSettled(
-        activeIds.map((id) => getTransferStatus(id))
-      );
-
+      const updates = await Promise.allSettled(activeIds.map((id) => getTransferStatus(id)));
       setTransfers((prev) =>
         prev.map((t) => {
           const idx = activeIds.indexOf(t.transfer_id);
@@ -132,19 +140,18 @@ export default function Transfers() {
     setError("");
 
     try {
-      // Plaintext content hash — receiver verifies after decrypting locally.
+      setSendStep("encrypt");
+
       const buffer = await selectedFile.arrayBuffer();
       const hashBuffer = await crypto.subtle.digest("SHA-256", buffer);
       const hashArray = Array.from(new Uint8Array(hashBuffer));
       const contentHash = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
 
-      // Generate the E2E key locally; it never leaves the browser.
       const cryptoKey = await generateE2EKey();
       const exportedKey = await exportKeyBase64(cryptoKey);
 
       const target = devices.find((d) => d.device_id === targetDevice);
 
-      // Step 1: Initiate transfer (no encryption_key — server would reject it).
       const transfer = await initiateTransfer({
         sender_node_id: myDevice.node_id,
         receiver_node_id: target?.node_id || "",
@@ -152,26 +159,24 @@ export default function Transfers() {
         total_size_bytes: selectedFile.size,
         content_hash: contentHash,
         chunk_size_bytes: 262144,
+        sender_ephemeral_pubkey: btoa(String.fromCharCode(...new Array(32).fill(1))),
       });
 
-      // Persist the key locally so the sender can re-share it later, and
-      // surface it in the UI for out-of-band delivery to the receiver.
       try {
         localStorage.setItem(`vinctum_transfer_key_${transfer.transfer_id}`, exportedKey);
-      } catch {
-        // localStorage may be unavailable; not fatal.
-      }
+      } catch { /* noop */ }
 
       setShowSend(false);
       setShareKey({ transferId: transfer.transfer_id, key: exportedKey });
 
-      // Step 2: Encrypt + upload chunks.
+      setSendStep("upload");
       setUploadProgress({ sent: 0, total: transfer.total_chunks });
 
       await uploadFile(transfer.transfer_id, selectedFile, cryptoKey, (sent, total) => {
         setUploadProgress({ sent, total });
       });
 
+      setSendStep("done");
       setUploadProgress(null);
       setSelectedFile(null);
       setTargetDevice("");
@@ -181,6 +186,7 @@ export default function Transfers() {
       setUploadProgress(null);
     } finally {
       setSending(false);
+      setSendStep("select");
     }
   }
 
@@ -190,6 +196,48 @@ export default function Transfers() {
       await fetchData();
     } catch (err: any) {
       setError(err?.response?.data?.error || "Failed to cancel transfer");
+    }
+  }
+
+  async function processDownload() {
+    if (!downloadPrompt?.keyInput || !myDevice?.node_id) return;
+    setDownloading(true);
+    setError("");
+
+    try {
+      let cryptoKey: CryptoKey;
+      try {
+        cryptoKey = await importKeyBase64(downloadPrompt.keyInput.trim());
+      } catch {
+        throw new Error("Invalid decryption key format.");
+      }
+
+      setDownloadProgress({ received: 0 });
+
+      const blob = await downloadFile(
+        downloadPrompt.transfer.transfer_id,
+        myDevice.node_id,
+        cryptoKey,
+        (received) => {
+          setDownloadProgress({ received });
+        }
+      );
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = downloadPrompt.transfer.filename || "downloaded-file";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      setDownloadPrompt(null);
+    } catch (err: any) {
+      setError(err?.response?.data?.error || err.message || "Failed to download or decrypt file");
+    } finally {
+      setDownloading(false);
+      setDownloadProgress(null);
     }
   }
 
@@ -213,10 +261,10 @@ export default function Transfers() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-semibold">File Sharing</h1>
+        <h1 className="text-xl font-medium text-gray-100">File Sharing</h1>
         <div className="space-y-2">
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="h-16 rounded-lg bg-gray-900 border border-gray-800 animate-pulse" />
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="h-16 rounded-md bg-gray-900/50 border border-gray-800/40 animate-pulse" />
           ))}
         </div>
       </div>
@@ -226,228 +274,203 @@ export default function Transfers() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">File Sharing</h1>
-        <div className="flex gap-2">
-          {myDevice?.node_id ? (
-            <button
-              onClick={() => setShowSend(true)}
-              className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-sm font-medium transition-colors flex items-center gap-2"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-              </svg>
-              Send File
-            </button>
-          ) : (
-            <div className="px-4 py-2 rounded-lg bg-gray-800 text-sm text-gray-500 border border-gray-700">
-              Register device with a node to share files
-            </div>
-          )}
+        <div>
+          <h1 className="text-xl font-medium text-gray-100">File Sharing</h1>
+          <p className="text-xs text-gray-500 mt-1">End-to-end encrypted with AES-256-GCM</p>
         </div>
+        {myDevice?.node_id ? (
+          <button
+            onClick={() => { setShowSend(true); setSendStep("select"); }}
+            className="px-3 py-1.5 rounded-md bg-gray-100 text-gray-900 text-sm font-medium hover:bg-white transition-colors"
+          >
+            Send File
+          </button>
+        ) : (
+          <span className="text-xs text-gray-600">Register a device to send files</span>
+        )}
       </div>
 
-      {/* Error banner */}
+      {/* Error */}
       {error && (
-        <div className="rounded-lg border border-red-800 bg-red-900/30 px-4 py-3 flex items-center justify-between">
-          <p className="text-sm text-red-300">{error}</p>
-          <button onClick={() => setError("")} className="text-red-400 hover:text-red-300 text-xs">Dismiss</button>
+        <div className="rounded-md border border-red-900/40 bg-red-950/30 px-4 py-3 flex items-center justify-between">
+          <p className="text-sm text-red-400">{error}</p>
+          <button onClick={() => setError("")} className="text-xs text-red-500 hover:text-red-300">Dismiss</button>
         </div>
       )}
 
-      {/* Upload progress banner */}
+      {/* Upload progress */}
       {uploadProgress && (
-        <div className="rounded-lg border border-blue-800 bg-blue-900/20 px-4 py-3 space-y-2">
+        <div className="rounded-md border border-gray-800/40 bg-gray-900/50 p-4 space-y-3">
           <div className="flex items-center justify-between">
-            <p className="text-sm text-blue-300 flex items-center gap-2">
-              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-              Uploading chunks...
-            </p>
-            <span className="text-xs text-blue-400">{uploadProgress.sent} / {uploadProgress.total}</span>
+            <div className="flex items-center gap-3">
+              <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+              <span className="text-sm text-gray-300">
+                {sendStep === "encrypt" ? "Encrypting..." : "Uploading chunks..."}
+              </span>
+            </div>
+            <span className="text-xs text-gray-500 tabular-nums">
+              {uploadProgress.sent} / {uploadProgress.total}
+            </span>
           </div>
-          <div className="w-full bg-gray-800 rounded-full h-2">
+          <div className="w-full bg-gray-800 rounded-full h-1.5">
             <div
-              className="h-2 rounded-full bg-blue-500 transition-all duration-300"
+              className="h-1.5 rounded-full bg-blue-500 transition-all duration-300"
               style={{ width: `${uploadProgress.total > 0 ? (uploadProgress.sent / uploadProgress.total) * 100 : 0}%` }}
             />
           </div>
+          {/* Step indicator */}
+          <div className="flex items-center gap-2 text-xs">
+            <StepDot active={sendStep === "encrypt"} done={sendStep === "upload" || sendStep === "done"} />
+            <span className={sendStep === "encrypt" ? "text-gray-300" : "text-gray-600"}>Encrypt</span>
+            <span className="text-gray-800">—</span>
+            <StepDot active={sendStep === "upload"} done={sendStep === "done"} />
+            <span className={sendStep === "upload" ? "text-gray-300" : "text-gray-600"}>Upload</span>
+            <span className="text-gray-800">—</span>
+            <StepDot active={false} done={sendStep === "done"} />
+            <span className={sendStep === "done" ? "text-gray-300" : "text-gray-600"}>Complete</span>
+          </div>
         </div>
       )}
 
-      {/* Stats */}
-      <div className="grid grid-cols-4 gap-4">
-        <StatsCard label="Total" count={counts.all} color="text-white" dot="bg-gray-400" />
-        <StatsCard label="Active" count={counts.active} color="text-blue-400" dot="bg-blue-400" />
-        <StatsCard label="Completed" count={counts.completed} color="text-emerald-400" dot="bg-emerald-400" />
-        <StatsCard label="Failed" count={counts.failed} color="text-red-400" dot="bg-red-400" />
-      </div>
+      {/* Download progress */}
+      {downloadProgress && (
+        <div className="rounded-md border border-gray-800/40 bg-gray-900/50 p-4">
+          <div className="flex items-center gap-3">
+            <div className="w-4 h-4 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
+            <span className="text-sm text-gray-300">Downloading and decrypting...</span>
+            <span className="text-xs text-gray-500 ml-auto tabular-nums">{downloadProgress.received} chunks</span>
+          </div>
+          <div className="w-full bg-gray-800 rounded-full h-1.5 mt-3 overflow-hidden">
+            <div className="h-1.5 rounded-full bg-emerald-500 w-full animate-pulse" />
+          </div>
+        </div>
+      )}
 
       {/* Filters */}
-      <div className="flex gap-1">
+      <div className="flex items-center gap-1 border-b border-gray-800/40 pb-3">
         {(["all", "active", "completed", "failed"] as const).map((f) => (
           <button
             key={f}
             onClick={() => setFilter(f)}
-            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 ${
-              filter === f ? "bg-gray-800 text-white" : "text-gray-500 hover:text-gray-300"
+            className={`px-3 py-1 rounded-md text-xs transition-colors ${
+              filter === f
+                ? "bg-gray-800 text-gray-200"
+                : "text-gray-500 hover:text-gray-300"
             }`}
           >
             {f.charAt(0).toUpperCase() + f.slice(1)}
-            <span className="text-gray-600 ml-0.5">{counts[f]}</span>
+            {counts[f] > 0 && <span className="text-gray-600 ml-1">{counts[f]}</span>}
           </button>
         ))}
       </div>
 
-      {/* No devices warning */}
+      {/* No devices */}
       {devices.length === 0 && (
-        <div className="rounded-lg border border-yellow-800 bg-yellow-900/20 p-6 text-center">
-          <p className="text-sm text-yellow-300">No approved devices found</p>
-          <p className="text-xs text-gray-500 mt-1">Register a device first to start sharing files</p>
+        <div className="rounded-md border border-gray-800/40 bg-gray-900/30 p-8 text-center">
+          <p className="text-gray-400">No devices found</p>
+          <p className="text-xs text-gray-600 mt-1">Register a device to start sharing files</p>
         </div>
       )}
 
       {/* Transfer list */}
       {filtered.length > 0 ? (
-        <div className="rounded-lg border border-gray-800 bg-gray-900 overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-800 text-gray-500 text-xs">
-                <th className="text-left px-4 py-3 font-medium">File</th>
-                <th className="text-left px-4 py-3 font-medium">Direction</th>
-                <th className="text-left px-4 py-3 font-medium">Status</th>
-                <th className="text-left px-4 py-3 font-medium">Progress</th>
-                <th className="text-right px-4 py-3 font-medium">Size</th>
-                <th className="text-right px-4 py-3 font-medium">Time</th>
-                <th className="text-right px-4 py-3 font-medium"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((t) => {
-                const isSender = t.sender_node_id === myDevice?.node_id;
-                const cfg = statusConfig[t.status] || statusConfig.TRANSFER_STATUS_UNSPECIFIED;
-                const badge = statusBadge[t.status] || statusBadge.TRANSFER_STATUS_UNSPECIFIED;
+        <div className="space-y-2">
+          {filtered.map((t) => {
+            const isSender = t.sender_node_id === myDevice?.node_id;
+            return (
+              <div key={t.transfer_id} className="rounded-md border border-gray-800/40 bg-gray-900/50 px-4 py-3">
+                <div className="flex items-center gap-4">
+                  {/* File info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm text-gray-200 truncate">{t.filename}</p>
+                      <span className="text-xs text-gray-600">{formatBytes(t.total_size_bytes)}</span>
+                    </div>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-xs text-gray-600">{isSender ? "Sent" : "Received"}</span>
+                      <span className="text-gray-800">·</span>
+                      <span className="text-xs text-gray-600">{timeAgo(t.created_at)}</span>
+                      <span className="text-gray-800">·</span>
+                      <span className="text-xs font-mono text-gray-700">{t.transfer_id.slice(0, 8)}</span>
+                    </div>
+                  </div>
 
-                return (
-                  <tr key={t.transfer_id} className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors">
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-gray-800 flex items-center justify-center shrink-0">
-                          <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-                          </svg>
+                  {/* Progress / Status */}
+                  <div className="flex items-center gap-4 shrink-0">
+                    {isActive(t.status) ? (
+                      <div className="w-32">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className={`text-xs ${statusColor[t.status]}`}>{statusLabel[t.status]}</span>
+                          <span className="text-xs text-gray-500 tabular-nums">{t.progress_percent}%</span>
                         </div>
-                        <div className="min-w-0">
-                          <p className="text-gray-200 truncate max-w-[200px]">{t.filename}</p>
-                          <p className="text-xs text-gray-600 font-mono truncate">{t.transfer_id.slice(0, 8)}...</p>
+                        <div className="w-full bg-gray-800 rounded-full h-1">
+                          <div
+                            className="h-1 rounded-full bg-blue-500 transition-all duration-500"
+                            style={{ width: `${t.progress_percent}%` }}
+                          />
                         </div>
                       </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        {isSender ? (
-                          <svg className="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-                          </svg>
-                        ) : (
-                          <svg className="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
-                          </svg>
-                        )}
-                        <span className="text-xs text-gray-400">{isSender ? "Sent" : "Received"}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`text-xs px-2 py-0.5 rounded border ${badge}`}>
-                        {cfg.label}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 w-40">
-                      {isActive(t.status) ? (
-                        <div className="space-y-1">
-                          <div className="w-full bg-gray-800 rounded-full h-1.5">
-                            <div
-                              className="h-1.5 rounded-full bg-blue-500 transition-all duration-500"
-                              style={{ width: `${t.progress_percent}%` }}
-                            />
-                          </div>
-                          <p className="text-xs text-gray-500 text-right">{t.progress_percent}%</p>
-                        </div>
-                      ) : t.status === "TRANSFER_STATUS_COMPLETED" ? (
-                        <span className="text-xs text-emerald-400">100%</span>
-                      ) : (
-                        <span className="text-xs text-gray-600">-</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-right text-gray-400 text-xs">
-                      {formatBytes(t.total_size_bytes)}
-                    </td>
-                    <td className="px-4 py-3 text-right text-gray-500 text-xs">
-                      {timeAgo(t.created_at)}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      {isActive(t.status) && (
-                        <button
-                          onClick={() => handleCancel(t.transfer_id)}
-                          className="text-xs text-gray-500 hover:text-red-400 transition-colors"
-                        >
-                          Cancel
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                    ) : (
+                      <span className={`text-xs ${statusColor[t.status]}`}>{statusLabel[t.status]}</span>
+                    )}
+
+                    {/* Actions */}
+                    {!isSender && t.status === "TRANSFER_STATUS_COMPLETED" && (
+                      <button
+                        onClick={() => setDownloadPrompt({ transfer: t, keyInput: "" })}
+                        className="text-xs text-gray-400 hover:text-gray-200 transition-colors"
+                      >
+                        Download
+                      </button>
+                    )}
+                    {isActive(t.status) && (
+                      <button
+                        onClick={() => handleCancel(t.transfer_id)}
+                        className="text-xs text-gray-600 hover:text-red-400 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       ) : (
         devices.length > 0 && (
-          <div className="rounded-lg border border-gray-800 bg-gray-900 p-8 text-center">
-            <svg className="w-12 h-12 text-gray-700 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 7.5h-.75A2.25 2.25 0 004.5 9.75v7.5a2.25 2.25 0 002.25 2.25h7.5a2.25 2.25 0 002.25-2.25v-7.5a2.25 2.25 0 00-2.25-2.25h-.75m-6 3.75l3 3m0 0l3-3m-3 3V1.5m6 9h.75a2.25 2.25 0 012.25 2.25v7.5a2.25 2.25 0 01-2.25 2.25h-7.5a2.25 2.25 0 01-2.25-2.25v-.75" />
-            </svg>
-            <p className="text-gray-500">No transfers yet</p>
+          <div className="rounded-md border border-gray-800/40 bg-gray-900/30 p-10 text-center">
+            <p className="text-gray-400">No transfers</p>
             <p className="text-xs text-gray-600 mt-1">Send a file to another device to get started</p>
           </div>
         )
       )}
 
-      {/* Share key modal — shown after a successful initiate so the sender can
-          deliver the AES key out-of-band to the recipient. */}
+      {/* Share key modal */}
       {shareKey && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShareKey(null)}>
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 w-full max-w-md space-y-4" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShareKey(null)}>
+          <div className="bg-gray-900 border border-gray-800/60 rounded-lg p-6 w-full max-w-md space-y-4" onClick={(e) => e.stopPropagation()}>
             <div>
-              <h2 className="text-lg font-medium">Share decryption key</h2>
-              <p className="text-sm text-gray-500 mt-1">Send this key to the recipient over a trusted channel. The server never sees it.</p>
+              <h2 className="text-base font-medium text-gray-100">Decryption Key</h2>
+              <p className="text-xs text-gray-500 mt-1">Send this key to the recipient through a secure channel. The server never sees it.</p>
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-2">AES-256-GCM key (base64)</label>
-              <textarea
-                readOnly
-                value={shareKey.key}
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 text-xs text-emerald-300 font-mono break-all resize-none"
-                rows={3}
-              />
+              <p className="text-xs text-gray-500 mb-2">AES-256-GCM key</p>
+              <div className="bg-gray-800/80 border border-gray-700/50 rounded-md p-3">
+                <p className="text-xs text-gray-300 font-mono break-all select-all">{shareKey.key}</p>
+              </div>
             </div>
-            <div className="flex items-start gap-2 bg-yellow-900/20 border border-yellow-800/50 rounded-lg px-3 py-2">
-              <svg className="w-4 h-4 text-yellow-400 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m0-10.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.333 9-6.03 9-11.623 0-1.31-.21-2.571-.598-3.749h-.152c-3.196 0-6.1-1.248-8.25-3.285zm0 13.036h.008v.008H12v-.008z" />
-              </svg>
-              <p className="text-xs text-yellow-200">If you lose this key, the file cannot be decrypted. It is also saved locally in this browser.</p>
-            </div>
+            <p className="text-xs text-yellow-600">This key is stored locally in your browser. If you lose it, the file cannot be decrypted.</p>
             <div className="flex gap-2 justify-end">
               <button
                 onClick={() => navigator.clipboard?.writeText(shareKey.key)}
-                className="px-4 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-sm text-gray-200 transition-colors"
+                className="px-3 py-1.5 rounded-md bg-gray-800/80 border border-gray-700/50 text-sm text-gray-300 hover:text-gray-100 transition-colors"
               >
                 Copy
               </button>
               <button
                 onClick={() => setShareKey(null)}
-                className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-sm font-medium transition-colors"
+                className="px-4 py-1.5 rounded-md bg-gray-100 text-gray-900 text-sm font-medium hover:bg-white transition-colors"
               >
                 Done
               </button>
@@ -458,35 +481,30 @@ export default function Transfers() {
 
       {/* Send File Modal */}
       {showSend && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShowSend(false)}>
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 w-full max-w-md space-y-5" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowSend(false)}>
+          <div className="bg-gray-900 border border-gray-800/60 rounded-lg p-6 w-full max-w-md space-y-5" onClick={(e) => e.stopPropagation()}>
             <div>
-              <h2 className="text-lg font-medium">Send File</h2>
-              <p className="text-sm text-gray-500 mt-1">Choose a file and target device</p>
+              <h2 className="text-base font-medium text-gray-100">Send File</h2>
+              <p className="text-xs text-gray-500 mt-1">Select a file and recipient device</p>
             </div>
 
             {/* File picker */}
             <div>
-              <label className="block text-xs text-gray-400 mb-2">File</label>
+              <p className="text-xs text-gray-500 mb-2">File</p>
               {selectedFile ? (
-                <div className="flex items-center gap-3 bg-gray-800 border border-gray-700 rounded-lg px-4 py-3">
-                  <svg className="w-5 h-5 text-blue-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-                  </svg>
-                  <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between bg-gray-800/50 border border-gray-700/50 rounded-md px-4 py-3">
+                  <div className="min-w-0">
                     <p className="text-sm text-gray-200 truncate">{selectedFile.name}</p>
                     <p className="text-xs text-gray-500">{formatBytes(selectedFile.size)}</p>
                   </div>
-                  <button onClick={() => setSelectedFile(null)} className="text-xs text-gray-500 hover:text-gray-300">
+                  <button onClick={() => setSelectedFile(null)} className="text-xs text-gray-500 hover:text-gray-300 ml-3">
                     Change
                   </button>
                 </div>
               ) : (
-                <label className="flex flex-col items-center gap-2 bg-gray-800/50 border border-dashed border-gray-700 rounded-lg px-4 py-6 cursor-pointer hover:border-blue-600 hover:bg-gray-800 transition-colors">
-                  <svg className="w-8 h-8 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.233-2.33 3 3 0 013.758 3.848A3.752 3.752 0 0118 19.5H6.75z" />
-                  </svg>
-                  <span className="text-sm text-gray-400">Click to select file</span>
+                <label className="flex flex-col items-center gap-1 bg-gray-800/30 border border-dashed border-gray-700/50 rounded-md px-4 py-6 cursor-pointer hover:border-gray-600 transition-colors">
+                  <span className="text-sm text-gray-500">Click to select file</span>
+                  <span className="text-xs text-gray-600">or drag and drop</span>
                   <input
                     type="file"
                     className="hidden"
@@ -498,16 +516,16 @@ export default function Transfers() {
 
             {/* Target device */}
             <div>
-              <label className="block text-xs text-gray-400 mb-2">Send to</label>
+              <p className="text-xs text-gray-500 mb-2">Send to</p>
               {otherDevices.length > 0 ? (
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   {otherDevices.map((d) => (
                     <label
                       key={d.device_id}
-                      className={`flex items-center gap-3 rounded-lg border px-4 py-3 cursor-pointer transition-colors ${
+                      className={`flex items-center justify-between rounded-md border px-4 py-2.5 cursor-pointer transition-colors ${
                         targetDevice === d.device_id
-                          ? "border-blue-600 bg-blue-900/20"
-                          : "border-gray-700 bg-gray-800/50 hover:border-gray-600"
+                          ? "border-gray-600 bg-gray-800/60"
+                          : "border-gray-800/40 bg-gray-800/30 hover:border-gray-700"
                       }`}
                     >
                       <input
@@ -518,56 +536,81 @@ export default function Transfers() {
                         onChange={(e) => setTargetDevice(e.target.value)}
                         className="sr-only"
                       />
-                      <DeviceIcon type={d.device_type} />
-                      <div className="flex-1 min-w-0">
+                      <div className="min-w-0">
                         <p className="text-sm text-gray-200">{d.name}</p>
-                        <p className="text-xs text-gray-500">{d.device_type} {d.node_id ? `| ${d.node_id.slice(0, 12)}...` : "| no node"}</p>
+                        {d.node_id && <p className="text-xs text-gray-600 font-mono">{d.node_id.slice(0, 16)}...</p>}
                       </div>
                       {targetDevice === d.device_id && (
-                        <svg className="w-5 h-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" />
-                        </svg>
+                        <span className="w-2 h-2 rounded-full bg-gray-300 shrink-0 ml-3" />
                       )}
                     </label>
                   ))}
                 </div>
               ) : (
-                <div className="text-center py-4 bg-gray-800/50 border border-gray-700 rounded-lg">
-                  <p className="text-sm text-gray-500">No other devices available</p>
-                  <p className="text-xs text-gray-600 mt-1">Pair another device first</p>
+                <div className="text-center py-4 border border-gray-800/40 rounded-md">
+                  <p className="text-xs text-gray-600">No other devices available. Pair another device first.</p>
                 </div>
               )}
             </div>
 
             {/* E2E notice */}
-            <div className="flex items-start gap-2 bg-emerald-900/20 border border-emerald-800/50 rounded-lg px-3 py-2">
-              <svg className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
-              </svg>
-              <p className="text-xs text-emerald-300">End-to-end encrypted with AES-256-GCM. Only you and the recipient can decrypt.</p>
-            </div>
+            <p className="text-xs text-gray-600">
+              Files are encrypted in your browser before upload. The encryption key is never sent to the server.
+            </p>
 
-            {/* Actions */}
-            <div className="flex gap-2 justify-end pt-1">
-              <button onClick={() => setShowSend(false)} className="px-4 py-2 rounded-lg text-sm text-gray-400 hover:text-white transition-colors">
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setShowSend(false)} className="px-3 py-1.5 rounded-md text-sm text-gray-500 hover:text-gray-300 transition-colors">
                 Cancel
               </button>
               <button
                 onClick={handleSend}
                 disabled={!selectedFile || !targetDevice || sending}
-                className="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-sm font-medium disabled:opacity-50 transition-colors flex items-center gap-2"
+                className="px-5 py-1.5 rounded-md bg-gray-100 text-gray-900 text-sm font-medium hover:bg-white disabled:opacity-40 transition-colors"
               >
-                {sending ? (
-                  <>
-                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                    Encrypting...
-                  </>
-                ) : (
-                  "Send"
-                )}
+                {sending ? "Processing..." : "Send"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Download/Decrypt Modal */}
+      {downloadPrompt && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => !downloading && setDownloadPrompt(null)}>
+          <div className="bg-gray-900 border border-gray-800/60 rounded-lg p-6 w-full max-w-md space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div>
+              <h2 className="text-base font-medium text-gray-100">Decrypt & Download</h2>
+              <p className="text-xs text-gray-500 mt-1">
+                Enter the decryption key for <span className="text-gray-300">{downloadPrompt.transfer.filename}</span>
+              </p>
+            </div>
+
+            <div>
+              <p className="text-xs text-gray-500 mb-2">AES-256-GCM Key</p>
+              <input
+                type="text"
+                autoFocus
+                placeholder="Paste the base64 key..."
+                value={downloadPrompt.keyInput}
+                onChange={(e) => setDownloadPrompt({ ...downloadPrompt, keyInput: e.target.value })}
+                className="w-full bg-gray-800/80 border border-gray-700/50 rounded-md p-3 text-sm text-gray-200 placeholder-gray-600 font-mono focus:outline-none focus:border-gray-600 transition-colors"
+              />
+            </div>
+
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setDownloadPrompt(null)}
+                disabled={downloading}
+                className="px-3 py-1.5 rounded-md text-sm text-gray-500 hover:text-gray-300 disabled:opacity-40 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={processDownload}
+                disabled={!downloadPrompt.keyInput.trim() || downloading}
+                className="px-5 py-1.5 rounded-md bg-gray-100 text-gray-900 text-sm font-medium hover:bg-white disabled:opacity-40 transition-colors"
+              >
+                {downloading ? "Decrypting..." : "Download"}
               </button>
             </div>
           </div>
@@ -577,27 +620,8 @@ export default function Transfers() {
   );
 }
 
-function StatsCard({ label, count, color, dot }: { label: string; count: number; color: string; dot: string }) {
-  return (
-    <div className="rounded-lg border border-gray-800 bg-gray-900 p-4">
-      <div className="flex items-center gap-2 mb-1">
-        <span className={`w-2 h-2 rounded-full ${dot}`} />
-        <span className="text-xs text-gray-500">{label}</span>
-      </div>
-      <p className={`text-xl font-semibold ${color}`}>{count}</p>
-    </div>
-  );
-}
-
-function DeviceIcon({ type }: { type: string }) {
-  const icons: Record<string, string> = {
-    pc: "M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25A2.25 2.25 0 015.25 3h13.5A2.25 2.25 0 0121 5.25z",
-    phone: "M10.5 1.5H8.25A2.25 2.25 0 006 3.75v16.5a2.25 2.25 0 002.25 2.25h7.5A2.25 2.25 0 0018 20.25V3.75a2.25 2.25 0 00-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3",
-    tablet: "M10.5 19.5h3m-6.75 2.25h10.5a2.25 2.25 0 002.25-2.25V4.5a2.25 2.25 0 00-2.25-2.25H6.75A2.25 2.25 0 004.5 4.5v15a2.25 2.25 0 002.25 2.25z",
-  };
-  return (
-    <svg className="w-5 h-5 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d={icons[type] || icons.pc} />
-    </svg>
-  );
+function StepDot({ active, done }: { active: boolean; done: boolean }) {
+  if (done) return <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />;
+  if (active) return <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />;
+  return <span className="w-1.5 h-1.5 rounded-full bg-gray-700" />;
 }

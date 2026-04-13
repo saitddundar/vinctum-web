@@ -16,6 +16,7 @@ export interface InitiateTransferRequest {
   // and the key never leaves the browser. The server rejects this field.
   chunk_size_bytes?: number;
   replication_factor?: number;
+  sender_ephemeral_pubkey?: string; // base64 encoded 32-byte X25519 public key
 }
 
 export interface RouteHop {

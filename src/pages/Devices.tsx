@@ -11,16 +11,10 @@ import {
 } from "../lib/device-api";
 import { getDeviceFingerprint, guessDeviceType } from "../lib/fingerprint";
 
-const typeBadge = {
-  pc: "bg-blue-900/50 text-blue-300 border-blue-800",
-  phone: "bg-purple-900/50 text-purple-300 border-purple-800",
-  tablet: "bg-teal-900/50 text-teal-300 border-teal-800",
-};
-
-const typeIcon = {
-  pc: "M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25A2.25 2.25 0 015.25 3h13.5A2.25 2.25 0 0121 5.25z",
-  phone: "M10.5 1.5H8.25A2.25 2.25 0 006 3.75v16.5a2.25 2.25 0 002.25 2.25h7.5A2.25 2.25 0 0018 20.25V3.75a2.25 2.25 0 00-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3",
-  tablet: "M10.5 19.5h3m-6.75 2.25h10.5a2.25 2.25 0 002.25-2.25V4.5a2.25 2.25 0 00-2.25-2.25H6.75A2.25 2.25 0 004.5 4.5v15a2.25 2.25 0 002.25 2.25z",
+const typeLabel: Record<string, string> = {
+  pc: "Computer",
+  phone: "Phone",
+  tablet: "Tablet",
 };
 
 function timeAgo(iso: string) {
@@ -33,12 +27,22 @@ function timeAgo(iso: string) {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
+function formatDate(iso: string) {
+  if (!iso) return "-";
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
 type ModalMode = null | "add-this" | "pairing-generate" | "pairing-redeem";
 
 export default function Devices() {
   const [devices, setDevices] = useState<Device[]>([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<ModalMode>(null);
+  const [selected, setSelected] = useState<Device | null>(null);
   const [pairingCode, setPairingCode] = useState("");
   const [pairingExpiry, setPairingExpiry] = useState(0);
   const [addName, setAddName] = useState("");
@@ -52,6 +56,7 @@ export default function Devices() {
   }, []);
 
   const pendingDevices = devices.filter((d) => !d.is_approved && !d.is_revoked);
+  const activeDevices = devices.filter((d) => d.is_approved && !d.is_revoked);
 
   async function fetchDevices() {
     try {
@@ -68,7 +73,6 @@ export default function Devices() {
     fetchDevices();
   }, []);
 
-  // Countdown for pairing code
   useEffect(() => {
     if (pairingExpiry <= 0) return;
     const t = setInterval(() => {
@@ -160,8 +164,10 @@ export default function Devices() {
   }
 
   async function handleRevoke(deviceId: string) {
+    if (!confirm("Revoke this device? It will lose access to your account.")) return;
     try {
       await revokeDevice(deviceId);
+      if (selected?.device_id === deviceId) setSelected(null);
       await fetchDevices();
     } catch (err) {
       console.error("Failed to revoke device:", err);
@@ -171,10 +177,10 @@ export default function Devices() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-semibold">Devices</h1>
+        <h1 className="text-xl font-medium text-gray-100">Devices</h1>
         <div className="space-y-2">
           {[...Array(3)].map((_, i) => (
-            <div key={i} className="h-16 rounded-lg bg-gray-900 border border-gray-800 animate-pulse" />
+            <div key={i} className="h-16 rounded-md bg-gray-900/50 border border-gray-800/40 animate-pulse" />
           ))}
         </div>
       </div>
@@ -184,52 +190,52 @@ export default function Devices() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Devices</h1>
+        <div>
+          <h1 className="text-xl font-medium text-gray-100">Devices</h1>
+          <p className="text-xs text-gray-500 mt-1">{activeDevices.length} registered</p>
+        </div>
         <div className="flex gap-2">
           <button
             onClick={() => setModal("add-this")}
-            className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-sm font-medium transition-colors"
+            className="px-3 py-1.5 rounded-md bg-gray-100 text-gray-900 text-sm font-medium hover:bg-white transition-colors"
           >
             Add This Device
           </button>
           <button
             onClick={handleGeneratePairingCode}
-            className="px-4 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-sm font-medium transition-colors border border-gray-700"
+            className="px-3 py-1.5 rounded-md bg-gray-800/80 border border-gray-700/50 text-sm text-gray-300 hover:text-gray-100 transition-colors"
           >
-            Remote Pairing
+            Generate Code
           </button>
           <button
             onClick={() => setModal("pairing-redeem")}
-            className="px-4 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-sm font-medium transition-colors border border-gray-700"
+            className="px-3 py-1.5 rounded-md bg-gray-800/80 border border-gray-700/50 text-sm text-gray-300 hover:text-gray-100 transition-colors"
           >
             Enter Code
           </button>
         </div>
       </div>
 
-      {/* Pending approvals banner */}
+      {/* Pending approvals */}
       {pendingDevices.length > 0 && (
-        <div className="rounded-lg border border-yellow-800 bg-yellow-900/30 p-4 space-y-3">
-          <p className="text-sm font-medium text-yellow-300">Pending Approval</p>
+        <div className="rounded-md border border-yellow-900/50 bg-yellow-950/30 p-4 space-y-3">
+          <p className="text-xs text-yellow-500 uppercase tracking-wider">Pending Approval</p>
           {pendingDevices.map((d) => (
             <div key={d.device_id} className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <svg className="w-5 h-5 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d={typeIcon[normalizeDeviceType(d.device_type)]} />
-                </svg>
-                <span className="text-sm text-gray-200">{d.name}</span>
-                <span className={`text-xs px-2 py-0.5 rounded border ${typeBadge[normalizeDeviceType(d.device_type)]}`}>{normalizeDeviceType(d.device_type)}</span>
+                <span className="text-sm text-gray-300">{d.name}</span>
+                <span className="text-xs text-gray-600">{typeLabel[normalizeDeviceType(d.device_type)]}</span>
               </div>
               <div className="flex gap-2">
                 <button
                   onClick={() => handleApprove(d.device_id, true)}
-                  className="px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-xs font-medium transition-colors"
+                  className="px-3 py-1 rounded-md bg-gray-800 hover:bg-gray-700 text-xs text-gray-300 transition-colors"
                 >
                   Approve
                 </button>
                 <button
                   onClick={() => handleApprove(d.device_id, false)}
-                  className="px-3 py-1 rounded bg-red-600 hover:bg-red-500 text-xs font-medium transition-colors"
+                  className="px-3 py-1 rounded-md text-xs text-gray-500 hover:text-red-400 transition-colors"
                 >
                   Reject
                 </button>
@@ -239,83 +245,114 @@ export default function Devices() {
         </div>
       )}
 
-      {/* Device list */}
-      <div className="rounded-lg border border-gray-800 bg-gray-900 overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-gray-800 text-gray-500 text-xs">
-              <th className="text-left px-4 py-3 font-medium">Device</th>
-              <th className="text-left px-4 py-3 font-medium">Type</th>
-              <th className="text-left px-4 py-3 font-medium">Status</th>
-              <th className="text-right px-4 py-3 font-medium">Last Active</th>
-              <th className="text-right px-4 py-3 font-medium">Added</th>
-              <th className="text-right px-4 py-3 font-medium"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {devices.filter((d) => !d.is_revoked).map((d) => (
-              <tr key={d.device_id} className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors">
-                <td className="px-4 py-3">
+      <div className="flex gap-6">
+        {/* Device list */}
+        <div className="flex-1 space-y-2">
+          {activeDevices.length === 0 ? (
+            <div className="rounded-md border border-gray-800/40 bg-gray-900/30 p-10 text-center">
+              <p className="text-gray-400">No devices registered</p>
+              <p className="text-xs text-gray-600 mt-1">Add this device or pair a remote one to get started</p>
+            </div>
+          ) : (
+            activeDevices.map((d) => (
+              <button
+                key={d.device_id}
+                onClick={() => setSelected(selected?.device_id === d.device_id ? null : d)}
+                className={`w-full text-left rounded-md border px-4 py-3 transition-colors ${
+                  selected?.device_id === d.device_id
+                    ? "border-gray-700 bg-gray-800/60"
+                    : "border-gray-800/40 bg-gray-900/50 hover:border-gray-700/60"
+                }`}
+              >
+                <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d={typeIcon[normalizeDeviceType(d.device_type)]} />
-                    </svg>
-                    <span className="text-gray-200">{d.name}</span>
+                    <span className="text-sm text-gray-200">{d.name}</span>
+                    <span className="text-xs text-gray-600">{typeLabel[normalizeDeviceType(d.device_type)]}</span>
                   </div>
-                </td>
-                <td className="px-4 py-3">
-                  <span className={`text-xs px-2 py-0.5 rounded border ${typeBadge[normalizeDeviceType(d.device_type)]}`}>{normalizeDeviceType(d.device_type)}</span>
-                </td>
-                <td className="px-4 py-3">
-                  {d.is_approved ? (
-                    <span className="text-xs px-2 py-0.5 rounded border bg-emerald-900/50 text-emerald-300 border-emerald-800">approved</span>
-                  ) : (
-                    <span className="text-xs px-2 py-0.5 rounded border bg-yellow-900/50 text-yellow-300 border-yellow-800">pending</span>
-                  )}
-                </td>
-                <td className="px-4 py-3 text-right text-gray-500 text-xs">{timeAgo(d.last_active)}</td>
-                <td className="px-4 py-3 text-right text-gray-500 text-xs">{timeAgo(d.created_at)}</td>
-                <td className="px-4 py-3 text-right">
-                  <button
-                    onClick={() => handleRevoke(d.device_id)}
-                    className="text-xs text-gray-500 hover:text-red-400 transition-colors"
-                  >
-                    Revoke
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                  <span className="text-xs text-gray-600">{timeAgo(d.last_active)}</span>
+                </div>
+                {d.node_id && (
+                  <p className="text-xs text-gray-600 font-mono mt-1">{d.node_id}</p>
+                )}
+              </button>
+            ))
+          )}
+        </div>
+
+        {/* Detail panel */}
+        {selected && (
+          <div className="w-72 shrink-0 rounded-md border border-gray-800/40 bg-gray-900/50 p-5 space-y-5 self-start">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium text-gray-200">{selected.name}</p>
+              <button onClick={() => setSelected(null)} className="text-xs text-gray-600 hover:text-gray-400">
+                Close
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <DetailRow label="Type" value={typeLabel[normalizeDeviceType(selected.device_type)]} />
+              <DetailRow label="Status" value={selected.is_approved ? "Approved" : "Pending"} />
+              <DetailRow label="Added" value={formatDate(selected.created_at)} />
+              <DetailRow label="Last Active" value={timeAgo(selected.last_active)} />
+              {selected.node_id && (
+                <div>
+                  <p className="text-xs text-gray-500 mb-1">Node ID</p>
+                  <p className="text-xs text-gray-400 font-mono break-all">{selected.node_id}</p>
+                </div>
+              )}
+              {selected.fingerprint && (
+                <div>
+                  <p className="text-xs text-gray-500 mb-1">Fingerprint</p>
+                  <p className="text-xs text-gray-400 font-mono break-all">{selected.fingerprint.slice(0, 24)}...</p>
+                </div>
+              )}
+              {selected.approved_by_device_id && (
+                <DetailRow label="Approved By" value={selected.approved_by_device_id.slice(0, 8) + "..."} />
+              )}
+            </div>
+
+            <button
+              onClick={() => handleRevoke(selected.device_id)}
+              className="w-full px-3 py-1.5 rounded-md text-xs text-gray-500 hover:text-red-400 border border-gray-800/40 hover:border-red-900/50 transition-colors"
+            >
+              Revoke Device
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Modals */}
       {modal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setModal(null)}>
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 w-full max-w-sm space-y-4" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setModal(null)}>
+          <div className="bg-gray-900 border border-gray-800/60 rounded-lg p-6 w-full max-w-sm space-y-4" onClick={(e) => e.stopPropagation()}>
             {modal === "add-this" && (
               <>
-                <h2 className="text-lg font-medium">Add This Device</h2>
+                <div>
+                  <h2 className="text-base font-medium text-gray-100">Add This Device</h2>
+                  <p className="text-xs text-gray-500 mt-1">Register the current browser as a device</p>
+                </div>
                 <input
                   type="text"
-                  placeholder="Device name (e.g. My Laptop)"
+                  placeholder="Device name"
                   value={addName}
                   onChange={(e) => setAddName(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+                  autoFocus
+                  className="w-full bg-gray-800/80 border border-gray-700/50 rounded-md px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-gray-600"
                 />
-                <p className="text-xs text-gray-500">
-                  Type: {guessDeviceType()} | Fingerprint: {fpPreview.slice(0, 12)}...
-                </p>
+                <div className="text-xs text-gray-600 space-y-1">
+                  <p>Type: {typeLabel[guessDeviceType()]}</p>
+                  <p>Fingerprint: {fpPreview.slice(0, 16)}...</p>
+                </div>
                 <div className="flex gap-2 justify-end">
-                  <button onClick={() => setModal(null)} className="px-4 py-2 rounded-lg text-sm text-gray-400 hover:text-white transition-colors">
+                  <button onClick={() => setModal(null)} className="px-3 py-1.5 rounded-md text-sm text-gray-500 hover:text-gray-300 transition-colors">
                     Cancel
                   </button>
                   <button
                     onClick={handleAddThisDevice}
                     disabled={!addName || actionLoading}
-                    className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-sm font-medium disabled:opacity-50 transition-colors"
+                    className="px-4 py-1.5 rounded-md bg-gray-100 text-gray-900 text-sm font-medium hover:bg-white disabled:opacity-40 transition-colors"
                   >
-                    {actionLoading ? "Adding..." : "Add Device"}
+                    {actionLoading ? "Adding..." : "Add"}
                   </button>
                 </div>
               </>
@@ -323,10 +360,12 @@ export default function Devices() {
 
             {modal === "pairing-generate" && (
               <>
-                <h2 className="text-lg font-medium">Pairing Code</h2>
-                <p className="text-sm text-gray-400">Enter this code on the new device</p>
-                <div className="text-center py-4">
-                  <p className="text-4xl font-mono font-bold tracking-[0.3em] text-white">{pairingCode}</p>
+                <div>
+                  <h2 className="text-base font-medium text-gray-100">Pairing Code</h2>
+                  <p className="text-xs text-gray-500 mt-1">Enter this code on the device you want to pair</p>
+                </div>
+                <div className="text-center py-6">
+                  <p className="text-3xl font-mono font-medium tracking-[0.4em] text-gray-100">{pairingCode}</p>
                 </div>
                 <div className="text-center">
                   {pairingExpiry > 0 ? (
@@ -334,10 +373,10 @@ export default function Devices() {
                       Expires in {Math.floor(pairingExpiry / 60)}:{String(pairingExpiry % 60).padStart(2, "0")}
                     </p>
                   ) : (
-                    <p className="text-xs text-red-400">Code expired</p>
+                    <p className="text-xs text-red-400/80">Code expired</p>
                   )}
                 </div>
-                <button onClick={() => setModal(null)} className="w-full px-4 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-sm transition-colors">
+                <button onClick={() => setModal(null)} className="w-full px-3 py-1.5 rounded-md bg-gray-800/80 border border-gray-700/50 text-sm text-gray-300 hover:text-gray-100 transition-colors">
                   Close
                 </button>
               </>
@@ -345,13 +384,17 @@ export default function Devices() {
 
             {modal === "pairing-redeem" && (
               <>
-                <h2 className="text-lg font-medium">Enter Pairing Code</h2>
+                <div>
+                  <h2 className="text-base font-medium text-gray-100">Enter Pairing Code</h2>
+                  <p className="text-xs text-gray-500 mt-1">Enter the 6-character code from your other device</p>
+                </div>
                 <input
                   type="text"
-                  placeholder="6-character code"
+                  placeholder="XXXXXX"
                   value={redeemCode}
                   onChange={(e) => setRedeemCode(e.target.value.toUpperCase().slice(0, 6))}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-center font-mono text-lg tracking-[0.2em] focus:outline-none focus:border-blue-500"
+                  autoFocus
+                  className="w-full bg-gray-800/80 border border-gray-700/50 rounded-md px-3 py-2 text-sm text-center font-mono text-lg tracking-[0.3em] text-gray-200 placeholder-gray-600 focus:outline-none focus:border-gray-600"
                   maxLength={6}
                 />
                 <input
@@ -359,16 +402,16 @@ export default function Devices() {
                   placeholder="Device name"
                   value={redeemName}
                   onChange={(e) => setRedeemName(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+                  className="w-full bg-gray-800/80 border border-gray-700/50 rounded-md px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-gray-600"
                 />
                 <div className="flex gap-2 justify-end">
-                  <button onClick={() => setModal(null)} className="px-4 py-2 rounded-lg text-sm text-gray-400 hover:text-white transition-colors">
+                  <button onClick={() => setModal(null)} className="px-3 py-1.5 rounded-md text-sm text-gray-500 hover:text-gray-300 transition-colors">
                     Cancel
                   </button>
                   <button
                     onClick={handleRedeemCode}
                     disabled={redeemCode.length !== 6 || !redeemName || actionLoading}
-                    className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-sm font-medium disabled:opacity-50 transition-colors"
+                    className="px-4 py-1.5 rounded-md bg-gray-100 text-gray-900 text-sm font-medium hover:bg-white disabled:opacity-40 transition-colors"
                   >
                     {actionLoading ? "Submitting..." : "Submit"}
                   </button>
@@ -378,6 +421,15 @@ export default function Devices() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between text-xs">
+      <span className="text-gray-500">{label}</span>
+      <span className="text-gray-300">{value}</span>
     </div>
   );
 }
