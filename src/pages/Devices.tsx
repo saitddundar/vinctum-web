@@ -57,6 +57,7 @@ export default function Devices() {
 
   const pendingDevices = devices.filter((d) => !d.is_approved && !d.is_revoked);
   const activeDevices = devices.filter((d) => d.is_approved && !d.is_revoked);
+  const revokedDevices = devices.filter((d) => d.is_revoked);
 
   async function fetchDevices() {
     try {
@@ -192,36 +193,51 @@ export default function Devices() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-medium text-gray-100">Devices</h1>
-          <p className="text-xs text-gray-500 mt-1">{activeDevices.length} registered</p>
+          <p className="text-xs text-gray-500 mt-1">Device inventory and pairing workflows</p>
         </div>
         <div className="flex gap-2">
           <button
             onClick={() => setModal("add-this")}
             className="px-3 py-1.5 rounded-md bg-gray-100 text-gray-900 text-sm font-medium hover:bg-white transition-colors"
           >
-            Add This Device
+            Register This Device
           </button>
           <button
             onClick={handleGeneratePairingCode}
             className="px-3 py-1.5 rounded-md bg-gray-800/80 border border-gray-700/50 text-sm text-gray-300 hover:text-gray-100 transition-colors"
           >
-            Generate Code
+            Pairing Code
           </button>
           <button
             onClick={() => setModal("pairing-redeem")}
             className="px-3 py-1.5 rounded-md bg-gray-800/80 border border-gray-700/50 text-sm text-gray-300 hover:text-gray-100 transition-colors"
           >
-            Enter Code
+            Join With Code
           </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <MetricCard label="Approved" value={activeDevices.length} hint="Trusted devices" />
+        <MetricCard label="Pending" value={pendingDevices.length} hint="Waiting for approval" />
+        <MetricCard label="Revoked" value={revokedDevices.length} hint="Access removed" />
+      </div>
+
+      <div className="rounded-xl border border-gray-800/50 bg-gradient-to-b from-gray-900/70 to-gray-900/40 px-4 py-3 shadow-[0_8px_24px_rgba(0,0,0,0.28)]">
+        <p className="text-xs uppercase tracking-wider text-gray-500 mb-2">Pairing Process</p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <ProcessStep title="1. Generate" description="Create one-time pairing code on an approved device." />
+          <ProcessStep title="2. Redeem" description="Enter code from the new device and submit fingerprint." />
+          <ProcessStep title="3. Approve" description="Review pending request and confirm trusted access." />
         </div>
       </div>
 
       {/* Pending approvals */}
       {pendingDevices.length > 0 && (
-        <div className="rounded-md border border-yellow-900/50 bg-yellow-950/30 p-4 space-y-3">
+        <div className="rounded-xl border border-yellow-900/40 bg-yellow-950/20 p-4 space-y-3 shadow-[0_8px_24px_rgba(0,0,0,0.2)]">
           <p className="text-xs text-yellow-500 uppercase tracking-wider">Pending Approval</p>
           {pendingDevices.map((d) => (
-            <div key={d.device_id} className="flex items-center justify-between">
+            <div key={d.device_id} className="flex items-center justify-between rounded-lg border border-yellow-900/20 bg-yellow-950/10 px-3 py-2">
               <div className="flex items-center gap-3">
                 <span className="text-sm text-gray-300">{d.name}</span>
                 <span className="text-xs text-gray-600">{typeLabel[normalizeDeviceType(d.device_type)]}</span>
@@ -258,10 +274,10 @@ export default function Devices() {
               <button
                 key={d.device_id}
                 onClick={() => setSelected(selected?.device_id === d.device_id ? null : d)}
-                className={`w-full text-left rounded-md border px-4 py-3 transition-colors ${
+                className={`w-full text-left rounded-xl border px-4 py-3 transition-all duration-200 ${
                   selected?.device_id === d.device_id
-                    ? "border-gray-700 bg-gray-800/60"
-                    : "border-gray-800/40 bg-gray-900/50 hover:border-gray-700/60"
+                    ? "border-gray-600 bg-gray-800/70 shadow-[0_0_0_1px_rgba(156,163,175,0.12)]"
+                    : "border-gray-800/40 bg-gray-900/50 hover:border-gray-700/80 hover:-translate-y-[1px]"
                 }`}
               >
                 <div className="flex items-center justify-between">
@@ -281,7 +297,7 @@ export default function Devices() {
 
         {/* Detail panel */}
         {selected && (
-          <div className="w-72 shrink-0 rounded-md border border-gray-800/40 bg-gray-900/50 p-5 space-y-5 self-start">
+          <div className="w-72 shrink-0 rounded-xl border border-gray-800/50 bg-gradient-to-b from-gray-900/80 to-gray-900/50 p-5 space-y-5 self-start shadow-[0_12px_30px_rgba(0,0,0,0.32)]">
             <div className="flex items-center justify-between">
               <p className="text-sm font-medium text-gray-200">{selected.name}</p>
               <button onClick={() => setSelected(null)} className="text-xs text-gray-600 hover:text-gray-400">
@@ -323,8 +339,8 @@ export default function Devices() {
 
       {/* Modals */}
       {modal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setModal(null)}>
-          <div className="bg-gray-900 border border-gray-800/60 rounded-lg p-6 w-full max-w-sm space-y-4" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-[2px] flex items-center justify-center z-50" onClick={() => setModal(null)}>
+          <div className="bg-gray-900/95 border border-gray-800/70 rounded-xl p-6 w-full max-w-sm space-y-4 shadow-[0_20px_40px_rgba(0,0,0,0.45)]" onClick={(e) => e.stopPropagation()}>
             {modal === "add-this" && (
               <>
                 <div>
@@ -430,6 +446,25 @@ function DetailRow({ label, value }: { label: string; value: string }) {
     <div className="flex justify-between text-xs">
       <span className="text-gray-500">{label}</span>
       <span className="text-gray-300">{value}</span>
+    </div>
+  );
+}
+
+function MetricCard({ label, value, hint }: { label: string; value: number; hint: string }) {
+  return (
+    <div className="rounded-xl border border-gray-800/50 bg-gradient-to-b from-gray-900/80 to-gray-900/50 px-4 py-3 shadow-[0_8px_22px_rgba(0,0,0,0.22)]">
+      <p className="text-xs uppercase tracking-wider text-gray-500">{label}</p>
+      <p className="text-2xl text-gray-100 font-light mt-1">{value}</p>
+      <p className="text-xs text-gray-600">{hint}</p>
+    </div>
+  );
+}
+
+function ProcessStep({ title, description }: { title: string; description: string }) {
+  return (
+    <div className="rounded-lg border border-gray-800/50 bg-gray-900/60 p-3">
+      <p className="text-sm text-gray-200">{title}</p>
+      <p className="text-xs text-gray-600 mt-1 leading-relaxed">{description}</p>
     </div>
   );
 }

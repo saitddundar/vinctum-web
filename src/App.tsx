@@ -7,8 +7,6 @@ import Register from "./pages/Register";
 import VerifyEmail from "./pages/VerifyEmail";
 import CheckEmail from "./pages/CheckEmail";
 import Dashboard from "./pages/Dashboard";
-import Nodes from "./pages/Nodes";
-import Anomalies from "./pages/Anomalies";
 import Devices from "./pages/Devices";
 import Sessions from "./pages/Sessions";
 import Transfers from "./pages/Transfers";
@@ -25,8 +23,6 @@ export default function App() {
           <Route element={<ProtectedRoute />}>
             <Route element={<Layout />}>
               <Route path="/" element={<Dashboard />} />
-              <Route path="/nodes" element={<Nodes />} />
-              <Route path="/anomalies" element={<Anomalies />} />
               <Route path="/devices" element={<Devices />} />
               <Route path="/sessions" element={<Sessions />} />
               <Route path="/transfers" element={<Transfers />} />

@@ -3,9 +3,7 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { listDevices } from "../lib/device-api";
 import { listPeerSessions } from "../lib/device-api";
-import { fetchMLHealth } from "../lib/ml-api";
 import type { Device, PeerSession } from "../types/device";
-import type { HealthResponse } from "../types/api";
 
 function timeAgo(iso: string) {
   if (!iso) return "";
@@ -21,19 +19,16 @@ export default function Dashboard() {
   const { user } = useAuth();
   const [devices, setDevices] = useState<Device[]>([]);
   const [sessions, setSessions] = useState<PeerSession[]>([]);
-  const [mlHealth, setMlHealth] = useState<HealthResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     Promise.all([
       listDevices().catch(() => ({ devices: [] })),
       listPeerSessions().catch(() => ({ sessions: [] })),
-      fetchMLHealth(),
     ])
-      .then(([devRes, sessRes, health]) => {
+      .then(([devRes, sessRes]) => {
         setDevices(devRes.devices || []);
         setSessions(sessRes.sessions || []);
-        setMlHealth(health);
       })
       .finally(() => setLoading(false));
   }, []);
@@ -65,7 +60,7 @@ export default function Dashboard() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Link to="/devices" className="group rounded-md border border-gray-800/40 bg-gray-900/50 p-5 hover:border-gray-700 transition-colors">
           <p className="text-xs text-gray-500 uppercase tracking-wider">Devices</p>
           <p className="text-2xl font-light text-gray-100 mt-2">{approved.length}</p>
@@ -84,23 +79,6 @@ export default function Dashboard() {
           )}
         </Link>
 
-        <div className="rounded-md border border-gray-800/40 bg-gray-900/50 p-5">
-          <p className="text-xs text-gray-500 uppercase tracking-wider">ML Service</p>
-          {mlHealth ? (
-            <>
-              <div className="flex items-center gap-2 mt-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                <span className="text-sm text-gray-300">Online</span>
-              </div>
-              <p className="text-xs text-gray-600 mt-1">v{mlHealth.version}</p>
-            </>
-          ) : (
-            <div className="flex items-center gap-2 mt-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-gray-600" />
-              <span className="text-sm text-gray-500">Offline</span>
-            </div>
-          )}
-        </div>
       </div>
 
       {/* Recent Devices */}

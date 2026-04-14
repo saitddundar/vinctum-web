@@ -6,8 +6,6 @@ const navItems = [
   { to: "/devices", label: "Devices" },
   { to: "/sessions", label: "Sessions" },
   { to: "/transfers", label: "File Sharing" },
-  { to: "/nodes", label: "Nodes" },
-  { to: "/anomalies", label: "Anomalies" },
 ];
 
 export default function Layout() {

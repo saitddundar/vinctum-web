@@ -33,6 +33,7 @@ const statusColor: Record<TransferStatus, string> = {
 };
 
 type FilterStatus = "all" | "active" | "completed" | "failed";
+type PipelineStep = "prepare" | "encrypt" | "upload" | "verify" | "complete";
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
@@ -76,6 +77,7 @@ export default function Transfers() {
   const [sendStep, setSendStep] = useState<TransferStep>("select");
   const [uploadProgress, setUploadProgress] = useState<{ sent: number; total: number } | null>(null);
   const [shareKey, setShareKey] = useState<{ transferId: string; key: string } | null>(null);
+  const [pipelineStep, setPipelineStep] = useState<PipelineStep>("prepare");
 
   // Receive
   const [downloadPrompt, setDownloadPrompt] = useState<{ transfer: TransferInfo; keyInput: string } | null>(null);
@@ -141,6 +143,7 @@ export default function Transfers() {
 
     try {
       setSendStep("encrypt");
+      setPipelineStep("encrypt");
 
       const buffer = await selectedFile.arrayBuffer();
       const hashBuffer = await crypto.subtle.digest("SHA-256", buffer);
@@ -170,13 +173,16 @@ export default function Transfers() {
       setShareKey({ transferId: transfer.transfer_id, key: exportedKey });
 
       setSendStep("upload");
+      setPipelineStep("upload");
       setUploadProgress({ sent: 0, total: transfer.total_chunks });
 
       await uploadFile(transfer.transfer_id, selectedFile, cryptoKey, (sent, total) => {
         setUploadProgress({ sent, total });
       });
 
+      setPipelineStep("verify");
       setSendStep("done");
+      setPipelineStep("complete");
       setUploadProgress(null);
       setSelectedFile(null);
       setTargetDevice("");
@@ -187,6 +193,7 @@ export default function Transfers() {
     } finally {
       setSending(false);
       setSendStep("select");
+      setPipelineStep("prepare");
     }
   }
 
@@ -276,7 +283,7 @@ export default function Transfers() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-medium text-gray-100">File Sharing</h1>
-          <p className="text-xs text-gray-500 mt-1">End-to-end encrypted with AES-256-GCM</p>
+          <p className="text-xs text-gray-500 mt-1">Secure transfer pipeline with end-to-end encryption</p>
         </div>
         {myDevice?.node_id ? (
           <button
@@ -298,9 +305,23 @@ export default function Transfers() {
         </div>
       )}
 
+      <div className="rounded-xl border border-gray-800/50 bg-gradient-to-b from-gray-900/70 to-gray-900/40 p-4 space-y-3 shadow-[0_8px_24px_rgba(0,0,0,0.28)]">
+        <div className="flex items-center justify-between">
+          <p className="text-xs uppercase tracking-wider text-gray-500">Transfer Pipeline</p>
+          <p className="text-xs text-gray-600">prepare / encrypt / upload / verify / complete</p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
+          <PipelinePill label="Prepare" active={pipelineStep === "prepare"} done={pipelineStep !== "prepare"} />
+          <PipelinePill label="Encrypt" active={pipelineStep === "encrypt"} done={["upload", "verify", "complete"].includes(pipelineStep)} />
+          <PipelinePill label="Upload" active={pipelineStep === "upload"} done={["verify", "complete"].includes(pipelineStep)} />
+          <PipelinePill label="Verify" active={pipelineStep === "verify"} done={pipelineStep === "complete"} />
+          <PipelinePill label="Complete" active={pipelineStep === "complete"} done={false} />
+        </div>
+      </div>
+
       {/* Upload progress */}
       {uploadProgress && (
-        <div className="rounded-md border border-gray-800/40 bg-gray-900/50 p-4 space-y-3">
+        <div className="rounded-xl border border-gray-800/50 bg-gradient-to-b from-gray-900/80 to-gray-900/50 p-4 space-y-3 shadow-[0_10px_26px_rgba(0,0,0,0.25)]">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
@@ -309,7 +330,7 @@ export default function Transfers() {
               </span>
             </div>
             <span className="text-xs text-gray-500 tabular-nums">
-              {uploadProgress.sent} / {uploadProgress.total}
+              {Math.round(uploadProgress.total > 0 ? (uploadProgress.sent / uploadProgress.total) * 100 : 0)}%
             </span>
           </div>
           <div className="w-full bg-gray-800 rounded-full h-1.5">
@@ -318,6 +339,9 @@ export default function Transfers() {
               style={{ width: `${uploadProgress.total > 0 ? (uploadProgress.sent / uploadProgress.total) * 100 : 0}%` }}
             />
           </div>
+          <p className="text-xs text-gray-600">
+            Chunks uploaded: {uploadProgress.sent} / {uploadProgress.total}
+          </p>
           {/* Step indicator */}
           <div className="flex items-center gap-2 text-xs">
             <StepDot active={sendStep === "encrypt"} done={sendStep === "upload" || sendStep === "done"} />
@@ -334,7 +358,7 @@ export default function Transfers() {
 
       {/* Download progress */}
       {downloadProgress && (
-        <div className="rounded-md border border-gray-800/40 bg-gray-900/50 p-4">
+        <div className="rounded-xl border border-gray-800/50 bg-gradient-to-b from-gray-900/80 to-gray-900/50 p-4 shadow-[0_10px_26px_rgba(0,0,0,0.25)]">
           <div className="flex items-center gap-3">
             <div className="w-4 h-4 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
             <span className="text-sm text-gray-300">Downloading and decrypting...</span>
@@ -378,7 +402,7 @@ export default function Transfers() {
           {filtered.map((t) => {
             const isSender = t.sender_node_id === myDevice?.node_id;
             return (
-              <div key={t.transfer_id} className="rounded-md border border-gray-800/40 bg-gray-900/50 px-4 py-3">
+              <div key={t.transfer_id} className="rounded-xl border border-gray-800/40 bg-gray-900/50 px-4 py-3 transition-all duration-200 hover:border-gray-700/70 hover:-translate-y-[1px]">
                 <div className="flex items-center gap-4">
                   {/* File info */}
                   <div className="flex-1 min-w-0">
@@ -400,7 +424,7 @@ export default function Transfers() {
                     {isActive(t.status) ? (
                       <div className="w-32">
                         <div className="flex items-center justify-between mb-1">
-                          <span className={`text-xs ${statusColor[t.status]}`}>{statusLabel[t.status]}</span>
+                          <span className={`text-xs px-2 py-0.5 rounded-full bg-gray-900/80 border border-gray-800/60 ${statusColor[t.status]}`}>{statusLabel[t.status]}</span>
                           <span className="text-xs text-gray-500 tabular-nums">{t.progress_percent}%</span>
                         </div>
                         <div className="w-full bg-gray-800 rounded-full h-1">
@@ -411,7 +435,7 @@ export default function Transfers() {
                         </div>
                       </div>
                     ) : (
-                      <span className={`text-xs ${statusColor[t.status]}`}>{statusLabel[t.status]}</span>
+                      <span className={`text-xs px-2 py-0.5 rounded-full bg-gray-900/80 border border-gray-800/60 ${statusColor[t.status]}`}>{statusLabel[t.status]}</span>
                     )}
 
                     {/* Actions */}
@@ -448,8 +472,8 @@ export default function Transfers() {
 
       {/* Share key modal */}
       {shareKey && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShareKey(null)}>
-          <div className="bg-gray-900 border border-gray-800/60 rounded-lg p-6 w-full max-w-md space-y-4" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-[2px] flex items-center justify-center z-50" onClick={() => setShareKey(null)}>
+          <div className="bg-gray-900/95 border border-gray-800/70 rounded-xl p-6 w-full max-w-md space-y-4 shadow-[0_20px_40px_rgba(0,0,0,0.45)]" onClick={(e) => e.stopPropagation()}>
             <div>
               <h2 className="text-base font-medium text-gray-100">Decryption Key</h2>
               <p className="text-xs text-gray-500 mt-1">Send this key to the recipient through a secure channel. The server never sees it.</p>
@@ -481,8 +505,8 @@ export default function Transfers() {
 
       {/* Send File Modal */}
       {showSend && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowSend(false)}>
-          <div className="bg-gray-900 border border-gray-800/60 rounded-lg p-6 w-full max-w-md space-y-5" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-[2px] flex items-center justify-center z-50" onClick={() => setShowSend(false)}>
+          <div className="bg-gray-900/95 border border-gray-800/70 rounded-xl p-6 w-full max-w-md space-y-5 shadow-[0_20px_40px_rgba(0,0,0,0.45)]" onClick={(e) => e.stopPropagation()}>
             <div>
               <h2 className="text-base font-medium text-gray-100">Send File</h2>
               <p className="text-xs text-gray-500 mt-1">Select a file and recipient device</p>
@@ -576,8 +600,8 @@ export default function Transfers() {
 
       {/* Download/Decrypt Modal */}
       {downloadPrompt && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => !downloading && setDownloadPrompt(null)}>
-          <div className="bg-gray-900 border border-gray-800/60 rounded-lg p-6 w-full max-w-md space-y-4" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-[2px] flex items-center justify-center z-50" onClick={() => !downloading && setDownloadPrompt(null)}>
+          <div className="bg-gray-900/95 border border-gray-800/70 rounded-xl p-6 w-full max-w-md space-y-4 shadow-[0_20px_40px_rgba(0,0,0,0.45)]" onClick={(e) => e.stopPropagation()}>
             <div>
               <h2 className="text-base font-medium text-gray-100">Decrypt & Download</h2>
               <p className="text-xs text-gray-500 mt-1">
@@ -624,4 +648,20 @@ function StepDot({ active, done }: { active: boolean; done: boolean }) {
   if (done) return <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />;
   if (active) return <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />;
   return <span className="w-1.5 h-1.5 rounded-full bg-gray-700" />;
+}
+
+function PipelinePill({ label, active, done }: { label: string; active: boolean; done: boolean }) {
+  return (
+    <div
+      className={`rounded-md border px-3 py-2 text-xs text-center transition-colors ${
+        done
+          ? "border-emerald-900/50 bg-emerald-950/20 text-emerald-300"
+          : active
+            ? "border-blue-900/50 bg-blue-950/20 text-blue-300"
+            : "border-gray-800/40 bg-gray-900/40 text-gray-500"
+      }`}
+    >
+      {label}
+    </div>
+  );
 }
