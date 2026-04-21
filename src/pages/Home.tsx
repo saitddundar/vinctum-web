@@ -1,12 +1,10 @@
 import { useState } from "react";
-import DashboardTab from "./home/DashboardTab";
 import FeedTab from "./home/FeedTab";
 import InboxTab from "./home/InboxTab";
 import AccountTab from "./home/AccountTab";
 import { useAuth } from "../context/AuthContext";
 
 const tabs = [
-  { id: "dashboard", label: "Dashboard" },
   { id: "feed", label: "Feed" },
   { id: "inbox", label: "Inbox" },
   { id: "account", label: "Account" },
@@ -16,7 +14,7 @@ type TabId = (typeof tabs)[number]["id"];
 
 export default function Home() {
   const { user } = useAuth();
-  const [active, setActive] = useState<TabId>("dashboard");
+  const [active, setActive] = useState<TabId>("feed");
 
   return (
     <div className="space-y-6">
@@ -26,7 +24,7 @@ export default function Home() {
           <h1 className="text-xl font-medium text-gray-100">
             {user?.username ? `Welcome back, ${user.username}` : "Home"}
           </h1>
-          <p className="text-sm text-gray-500 mt-0.5">Your Vinctum dashboard</p>
+          <p className="text-sm text-gray-500 mt-0.5">Your Vinctum network</p>
         </div>
         <div className="w-8 h-8 rounded-full bg-gray-800 border border-gray-700/50 flex items-center justify-center text-xs text-gray-400 uppercase">
           {user?.username?.charAt(0) || "?"}
@@ -54,7 +52,6 @@ export default function Home() {
       </div>
 
       {/* Tab content */}
-      {active === "dashboard" && <DashboardTab />}
       {active === "feed" && <FeedTab />}
       {active === "inbox" && <InboxTab />}
       {active === "account" && <AccountTab />}
