@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import type { PeerSession, Device } from "../types/device";
 import { normalizeDeviceType } from "../types/device";
 import {
@@ -64,6 +65,7 @@ export default function Sessions() {
       setShowCreate(false);
       setNewName("");
       setSelectedDevice("");
+      toast.success("Session created");
     } catch (err: any) {
       setError(err?.response?.data?.error || "Failed to create session");
     } finally {
@@ -147,7 +149,13 @@ export default function Sessions() {
       {sessions.length === 0 && !showCreate && (
         <div className="rounded-md border border-gray-800/40 bg-gray-900/30 p-10 text-center">
           <p className="text-gray-400">No active sessions</p>
-          <p className="text-xs text-gray-600 mt-1">Create a session to group devices for file sharing</p>
+          <p className="text-xs text-gray-600 mt-1 mb-3">Create a session to group devices for file sharing</p>
+          <button
+            onClick={() => setShowCreate(true)}
+            className="px-4 py-1.5 rounded-md bg-gray-800/80 border border-gray-700/50 text-xs text-gray-300 hover:text-gray-100 hover:border-gray-600 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
+          >
+            Create your first session
+          </button>
         </div>
       )}
 
@@ -214,7 +222,7 @@ export default function Sessions() {
           const isAdding = addDeviceSession === session.session_id;
 
           return (
-            <div key={session.session_id} className="rounded-md border border-gray-800/40 bg-gray-900/50 p-4 space-y-3">
+            <div key={session.session_id} className="rounded-md border border-gray-800/40 bg-gray-900/50 p-4 space-y-3 hover:border-gray-700/70 hover:-translate-y-px transition-all duration-200">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-200">{session.name}</p>
