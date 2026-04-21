@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 const navItems = [
@@ -21,7 +21,9 @@ export default function Layout() {
     <div className="min-h-screen bg-gray-950 text-gray-100 flex">
       <aside className="w-52 border-r border-gray-800/40 bg-gray-950 flex flex-col fixed inset-y-0 left-0">
         <div className="h-14 flex items-center px-5 border-b border-gray-800/40">
-          <span className="text-base font-medium tracking-tight text-gray-200">vinctum</span>
+          <Link to="/" className="text-base font-medium tracking-tight text-gray-200 hover:text-gray-100 transition-colors">
+            vinctum
+          </Link>
         </div>
 
         <nav className="flex-1 px-3 py-4 space-y-0.5">
