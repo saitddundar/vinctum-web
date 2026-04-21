@@ -24,13 +24,14 @@ src/
     fingerprint.ts          # Browser fingerprint + device type detection
     mock-data.ts            # Mock nodes and anomalies for dashboard
   pages/
+    Home.tsx                # Public landing page, auth-aware header (Sign in / Dashboard+Account)
+    Account.tsx             # Protected, own header, profile info + sign out
     Login.tsx, Register.tsx  # Auth pages
     VerifyEmail.tsx, CheckEmail.tsx  # Email verification flow
-    Dashboard.tsx           # Stats cards + recent anomalies + node overview
-    Nodes.tsx               # Node table with filtering/sorting + detail panel
-    Anomalies.tsx           # Anomaly table with severity filters + search
+    Dashboard.tsx           # Protected, sidebar layout, stats + devices + quick actions
     Devices.tsx             # Device management + pairing flow
     Sessions.tsx            # Peer session management
+    Transfers.tsx           # E2E encrypted file transfers
   types/
     api.ts                  # ML API types (NodeMetrics, ScoreResponse, etc.)
     auth.ts                 # Auth types (User, LoginRequest, etc.)
@@ -55,6 +56,7 @@ npm run lint
 
 ## Conventions
 
+- Two layout modes: Home/Account have own header (no sidebar), Dashboard/Devices/Sessions/Transfers use sidebar Layout
 - Dark theme: bg-gray-950 base, gray-900 cards, gray-800 borders
 - MOCK flag in auth-api.ts and device-api.ts: set to true for frontend-only dev
 - Mock login: test@vinctum.app / 12345678
