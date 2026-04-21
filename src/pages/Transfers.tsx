@@ -1,4 +1,5 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
+import { toast } from "sonner";
 import type { Device } from "../types/device";
 import type { TransferInfo, TransferStatus } from "../types/transfer";
 import { listDevices } from "../lib/device-api";
@@ -78,6 +79,10 @@ export default function Transfers() {
   const [uploadProgress, setUploadProgress] = useState<{ sent: number; total: number } | null>(null);
   const [shareKey, setShareKey] = useState<{ transferId: string; key: string } | null>(null);
   const [pipelineStep, setPipelineStep] = useState<PipelineStep>("prepare");
+
+  // Upload speed tracking
+  const uploadStartRef = useRef<number>(0);
+  const chunkSizeRef = useRef<number>(262144);
 
   // Receive
   const [downloadPrompt, setDownloadPrompt] = useState<{ transfer: TransferInfo; keyInput: string } | null>(null);
@@ -175,6 +180,8 @@ export default function Transfers() {
       setSendStep("upload");
       setPipelineStep("upload");
       setUploadProgress({ sent: 0, total: transfer.total_chunks });
+      uploadStartRef.current = Date.now();
+      chunkSizeRef.current = 262144;
 
       await uploadFile(transfer.transfer_id, selectedFile, cryptoKey, (sent, total) => {
         setUploadProgress({ sent, total });
@@ -186,6 +193,7 @@ export default function Transfers() {
       setUploadProgress(null);
       setSelectedFile(null);
       setTargetDevice("");
+      toast.success("File sent successfully");
       await fetchData();
     } catch (err: any) {
       setError(err?.response?.data?.error || "Failed to send file");
@@ -200,9 +208,10 @@ export default function Transfers() {
   async function handleCancel(transferId: string) {
     try {
       await cancelTransfer(transferId, "Cancelled by user");
+      toast.success("Transfer cancelled");
       await fetchData();
     } catch (err: any) {
-      setError(err?.response?.data?.error || "Failed to cancel transfer");
+      toast.error(err?.response?.data?.error || "Failed to cancel transfer");
     }
   }
 
@@ -288,7 +297,7 @@ export default function Transfers() {
         {myDevice?.node_id ? (
           <button
             onClick={() => { setShowSend(true); setSendStep("select"); }}
-            className="px-3 py-1.5 rounded-md bg-gray-100 text-gray-900 text-sm font-medium hover:bg-white transition-colors"
+            className="px-3 py-1.5 rounded-md bg-gray-100 text-gray-900 text-sm font-medium hover:bg-white hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
           >
             Send File
           </button>
@@ -339,9 +348,7 @@ export default function Transfers() {
               style={{ width: `${uploadProgress.total > 0 ? (uploadProgress.sent / uploadProgress.total) * 100 : 0}%` }}
             />
           </div>
-          <p className="text-xs text-gray-600">
-            Chunks uploaded: {uploadProgress.sent} / {uploadProgress.total}
-          </p>
+          <UploadStats sent={uploadProgress.sent} total={uploadProgress.total} startTime={uploadStartRef.current} chunkSize={chunkSizeRef.current} />
           {/* Step indicator */}
           <div className="flex items-center gap-2 text-xs">
             <StepDot active={sendStep === "encrypt"} done={sendStep === "upload" || sendStep === "done"} />
@@ -465,7 +472,15 @@ export default function Transfers() {
         devices.length > 0 && (
           <div className="rounded-md border border-gray-800/40 bg-gray-900/30 p-10 text-center">
             <p className="text-gray-400">No transfers</p>
-            <p className="text-xs text-gray-600 mt-1">Send a file to another device to get started</p>
+            <p className="text-xs text-gray-600 mt-1 mb-3">Send a file to another device to get started</p>
+            {myDevice?.node_id && (
+              <button
+                onClick={() => { setShowSend(true); setSendStep("select"); }}
+                className="px-4 py-1.5 rounded-md bg-gray-800/80 border border-gray-700/50 text-xs text-gray-300 hover:text-gray-100 hover:border-gray-600 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
+              >
+                Send your first file
+              </button>
+            )}
           </div>
         )
       )}
@@ -653,7 +668,7 @@ function StepDot({ active, done }: { active: boolean; done: boolean }) {
 function PipelinePill({ label, active, done }: { label: string; active: boolean; done: boolean }) {
   return (
     <div
-      className={`rounded-md border px-3 py-2 text-xs text-center transition-colors ${
+      className={`rounded-md border px-3 py-2 text-xs text-center transition-all duration-300 ${
         done
           ? "border-emerald-900/50 bg-emerald-950/20 text-emerald-300"
           : active
@@ -662,6 +677,30 @@ function PipelinePill({ label, active, done }: { label: string; active: boolean;
       }`}
     >
       {label}
+    </div>
+  );
+}
+
+function UploadStats({ sent, total, startTime, chunkSize }: { sent: number; total: number; startTime: number; chunkSize: number }) {
+  const elapsed = (Date.now() - startTime) / 1000;
+  const bytesUploaded = sent * chunkSize;
+  const speed = elapsed > 0 ? bytesUploaded / elapsed : 0;
+  const remaining = total > sent && speed > 0 ? ((total - sent) * chunkSize) / speed : 0;
+
+  const fmtSpeed = speed > 1024 * 1024
+    ? `${(speed / (1024 * 1024)).toFixed(1)} MB/s`
+    : `${(speed / 1024).toFixed(0)} KB/s`;
+
+  const fmtEta = remaining > 60
+    ? `~${Math.ceil(remaining / 60)}m remaining`
+    : remaining > 0
+      ? `~${Math.ceil(remaining)}s remaining`
+      : "";
+
+  return (
+    <div className="flex items-center justify-between text-xs text-gray-600">
+      <span>Chunks: {sent} / {total}</span>
+      <span className="tabular-nums">{sent > 0 ? `${fmtSpeed}${fmtEta ? ` — ${fmtEta}` : ""}` : ""}</span>
     </div>
   );
 }
