@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import type { Device } from "../types/device";
 import { normalizeDeviceType, toProtoDeviceType } from "../types/device";
 import {
@@ -15,6 +16,12 @@ const typeLabel: Record<string, string> = {
   pc: "Computer",
   phone: "Phone",
   tablet: "Tablet",
+};
+
+const typeIcon: Record<string, string> = {
+  pc: "💻",
+  phone: "📱",
+  tablet: "📋",
 };
 
 function timeAgo(iso: string) {
@@ -101,9 +108,10 @@ export default function Devices() {
       await fetchDevices();
       setModal(null);
       setAddName("");
+      toast.success("Device registered");
     } catch (err) {
       console.error("Failed to add device:", err);
-      alert("Failed to add device. Is the backend running?");
+      toast.error("Failed to add device");
     } finally {
       setActionLoading(false);
     }
@@ -120,7 +128,7 @@ export default function Devices() {
       setModal("pairing-generate");
     } catch (err) {
       console.error("Failed to generate pairing code:", err);
-      alert("Failed to generate pairing code.");
+      toast.error("Failed to generate pairing code");
     } finally {
       setActionLoading(false);
     }
@@ -141,9 +149,10 @@ export default function Devices() {
       setModal(null);
       setRedeemCode("");
       setRedeemName("");
+      toast.success("Pairing code redeemed");
     } catch (err) {
       console.error("Failed to redeem code:", err);
-      alert("Failed to redeem pairing code.");
+      toast.error("Failed to redeem pairing code");
     } finally {
       setActionLoading(false);
     }
@@ -267,14 +276,20 @@ export default function Devices() {
           {activeDevices.length === 0 ? (
             <div className="rounded-md border border-gray-800/40 bg-gray-900/30 p-10 text-center">
               <p className="text-gray-400">No devices registered</p>
-              <p className="text-xs text-gray-600 mt-1">Add this device or pair a remote one to get started</p>
+              <p className="text-xs text-gray-600 mt-1 mb-3">Add this device or pair a remote one to get started</p>
+              <button
+                onClick={() => setModal("add-this")}
+                className="px-4 py-1.5 rounded-md bg-gray-800/80 border border-gray-700/50 text-xs text-gray-300 hover:text-gray-100 hover:border-gray-600 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
+              >
+                Register this device
+              </button>
             </div>
           ) : (
             activeDevices.map((d) => (
               <button
                 key={d.device_id}
                 onClick={() => setSelected(selected?.device_id === d.device_id ? null : d)}
-                className={`w-full text-left rounded-xl border px-4 py-3 transition-all duration-200 ${
+                className={`w-full text-left rounded-xl border px-4 py-3 transition-all duration-200 hover:scale-[1.005] ${
                   selected?.device_id === d.device_id
                     ? "border-gray-600 bg-gray-800/70 shadow-[0_0_0_1px_rgba(156,163,175,0.12)]"
                     : "border-gray-800/40 bg-gray-900/50 hover:border-gray-700/80 hover:-translate-y-[1px]"
@@ -282,6 +297,7 @@ export default function Devices() {
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
+                    <span className="text-base">{typeIcon[normalizeDeviceType(d.device_type)] || "💻"}</span>
                     <span className="text-sm text-gray-200">{d.name}</span>
                     <span className="text-xs text-gray-600">{typeLabel[normalizeDeviceType(d.device_type)]}</span>
                   </div>
