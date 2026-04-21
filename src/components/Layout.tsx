@@ -2,7 +2,7 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 const navItems = [
-  { to: "/", label: "Overview" },
+  { to: "/", label: "Home" },
   { to: "/devices", label: "Devices" },
   { to: "/sessions", label: "Sessions" },
   { to: "/transfers", label: "File Sharing" },

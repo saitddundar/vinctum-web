@@ -6,7 +6,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import VerifyEmail from "./pages/VerifyEmail";
 import CheckEmail from "./pages/CheckEmail";
-import Dashboard from "./pages/Dashboard";
+import Home from "./pages/Home";
 import Devices from "./pages/Devices";
 import Sessions from "./pages/Sessions";
 import Transfers from "./pages/Transfers";
@@ -22,7 +22,7 @@ export default function App() {
           <Route path="/check-email" element={<CheckEmail />} />
           <Route element={<ProtectedRoute />}>
             <Route element={<Layout />}>
-              <Route path="/" element={<Dashboard />} />
+              <Route path="/" element={<Home />} />
               <Route path="/devices" element={<Devices />} />
               <Route path="/sessions" element={<Sessions />} />
               <Route path="/transfers" element={<Transfers />} />
