@@ -32,6 +32,7 @@ export interface InitiateTransferResponse {
   status: TransferStatus;
   created_at: string;
   route_hops: RouteHop[];
+  sender_ephemeral_pubkey?: string; // base64, echoed back for verification
 }
 
 export interface TransferStatusResponse {
@@ -43,6 +44,7 @@ export interface TransferStatusResponse {
   total_bytes: number;
   started_at: string;
   updated_at: string;
+  sender_ephemeral_pubkey?: string; // base64, for receiver-side key derivation
 }
 
 export interface TransferInfo {
@@ -54,6 +56,7 @@ export interface TransferInfo {
   status: TransferStatus;
   progress_percent: number;
   created_at: string;
+  sender_ephemeral_pubkey?: string; // base64, for receiver-side key derivation
 }
 
 export interface CancelTransferResponse {

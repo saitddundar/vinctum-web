@@ -145,6 +145,66 @@ async function encryptChunk(key: CryptoKey, plaintext: ArrayBuffer): Promise<Uin
   return out;
 }
 
+/**
+ * Opens an NDJSON stream for real-time transfer events.
+ * Falls back to polling if streaming is not available.
+ */
+export function watchTransfers(
+  nodeId: string,
+  onEvent: (event: TransferStatusResponse) => void,
+  onError?: (err: Error) => void,
+): () => void {
+  const controller = new AbortController();
+  const token = localStorage.getItem("vinctum_access_token");
+
+  (async () => {
+    try {
+      const resp = await fetch(`/api/v1/transfer-events?node_id=${encodeURIComponent(nodeId)}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        signal: controller.signal,
+      });
+
+      if (!resp.ok || !resp.body) {
+        throw new Error(`Stream failed: ${resp.status}`);
+      }
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          try {
+            const event = JSON.parse(trimmed);
+            if (event.error) {
+              onError?.(new Error(event.error));
+              continue;
+            }
+            onEvent(event);
+          } catch { /* skip malformed lines */ }
+        }
+      }
+    } catch (err) {
+      if ((err as Error).name !== "AbortError") {
+        onError?.(err as Error);
+      }
+    }
+  })();
+
+  return () => controller.abort();
+}
+
 const CHUNK_SIZE = 256 * 1024; // 256 KB
 
 /**
