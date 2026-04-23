@@ -9,11 +9,16 @@ import {
   cancelTransfer,
   getTransferStatus,
   uploadFile,
-  generateE2EKey,
-  exportKeyBase64,
-  importKeyBase64,
   downloadFile,
+  watchTransfers,
 } from "../lib/transfer-api";
+import {
+  ensureDeviceKeys,
+  getRemoteDeviceKey,
+  generateEphemeralKeyPair,
+  deriveTransferKey,
+  deriveReceiverKey,
+} from "../lib/device-key";
 
 const statusLabel: Record<TransferStatus, string> = {
   TRANSFER_STATUS_UNSPECIFIED: "Unknown",
@@ -77,7 +82,6 @@ export default function Transfers() {
   const [sending, setSending] = useState(false);
   const [sendStep, setSendStep] = useState<TransferStep>("select");
   const [uploadProgress, setUploadProgress] = useState<{ sent: number; total: number } | null>(null);
-  const [shareKey, setShareKey] = useState<{ transferId: string; key: string } | null>(null);
   const [pipelineStep, setPipelineStep] = useState<PipelineStep>("prepare");
 
   // Upload speed tracking
@@ -85,7 +89,6 @@ export default function Transfers() {
   const chunkSizeRef = useRef<number>(262144);
 
   // Receive
-  const [downloadPrompt, setDownloadPrompt] = useState<{ transfer: TransferInfo; keyInput: string } | null>(null);
   const [downloading, setDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState<{ received: number } | null>(null);
 
@@ -97,8 +100,11 @@ export default function Transfers() {
       const approved = devRes.devices.filter((d) => d.is_approved && !d.is_revoked);
       setDevices(approved);
 
-      if (approved.length > 0 && approved[0].node_id) {
-        const txRes = await listTransfers(approved[0].node_id);
+      // Ensure device keys are generated and uploaded for the first approved device
+      const first = approved.find((d) => d.node_id);
+      if (first) {
+        try { await ensureDeviceKeys(first.device_id); } catch { /* keys may already exist */ }
+        const txRes = await listTransfers(first.node_id);
         setTransfers(txRes.transfers || []);
       }
     } catch (err: any) {
@@ -150,32 +156,41 @@ export default function Transfers() {
       setSendStep("encrypt");
       setPipelineStep("encrypt");
 
+      // Hash the file content
       const buffer = await selectedFile.arrayBuffer();
       const hashBuffer = await crypto.subtle.digest("SHA-256", buffer);
       const hashArray = Array.from(new Uint8Array(hashBuffer));
       const contentHash = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
 
-      const cryptoKey = await generateE2EKey();
-      const exportedKey = await exportKeyBase64(cryptoKey);
-
       const target = devices.find((d) => d.device_id === targetDevice);
+      if (!target?.node_id) throw new Error("Target device has no node ID");
 
+      // Generate ephemeral keypair and fetch receiver's static public key
+      const receiverStaticPub = await getRemoteDeviceKey(target.device_id);
+      const ephemeral = await generateEphemeralKeyPair();
+      const ephemeralPubB64 = btoa(String.fromCharCode(...ephemeral.publicKeyBytes));
+
+      // Initiate transfer with ephemeral public key
       const transfer = await initiateTransfer({
         sender_node_id: myDevice.node_id,
-        receiver_node_id: target?.node_id || "",
+        receiver_node_id: target.node_id,
         filename: selectedFile.name,
         total_size_bytes: selectedFile.size,
         content_hash: contentHash,
         chunk_size_bytes: 262144,
-        sender_ephemeral_pubkey: btoa(String.fromCharCode(...new Array(32).fill(1))),
+        sender_ephemeral_pubkey: ephemeralPubB64,
       });
 
-      try {
-        localStorage.setItem(`vinctum_transfer_key_${transfer.transfer_id}`, exportedKey);
-      } catch { /* noop */ }
+      // Derive AES-256-GCM key via ECDH + HKDF
+      const aesKey = await deriveTransferKey(
+        ephemeral.privateKey,
+        receiverStaticPub,
+        ephemeral.publicKeyBytes,
+        receiverStaticPub,
+        transfer.transfer_id,
+      );
 
       setShowSend(false);
-      setShareKey({ transferId: transfer.transfer_id, key: exportedKey });
 
       setSendStep("upload");
       setPipelineStep("upload");
@@ -183,7 +198,7 @@ export default function Transfers() {
       uploadStartRef.current = Date.now();
       chunkSizeRef.current = 262144;
 
-      await uploadFile(transfer.transfer_id, selectedFile, cryptoKey, (sent, total) => {
+      await uploadFile(transfer.transfer_id, selectedFile, aesKey, (sent, total) => {
         setUploadProgress({ sent, total });
       });
 
@@ -196,7 +211,7 @@ export default function Transfers() {
       toast.success("File sent successfully");
       await fetchData();
     } catch (err: any) {
-      setError(err?.response?.data?.error || "Failed to send file");
+      setError(err?.response?.data?.error || err.message || "Failed to send file");
       setUploadProgress(null);
     } finally {
       setSending(false);
@@ -215,25 +230,38 @@ export default function Transfers() {
     }
   }
 
-  async function processDownload() {
-    if (!downloadPrompt?.keyInput || !myDevice?.node_id) return;
+  async function handleDownload(transfer: TransferInfo) {
+    if (!myDevice?.node_id || !myDevice?.device_id) return;
     setDownloading(true);
     setError("");
 
     try {
-      let cryptoKey: CryptoKey;
-      try {
-        cryptoKey = await importKeyBase64(downloadPrompt.keyInput.trim());
-      } catch {
-        throw new Error("Invalid decryption key format.");
+      // Get the sender's ephemeral public key from transfer info
+      let ephemeralPubB64 = transfer.sender_ephemeral_pubkey;
+      if (!ephemeralPubB64) {
+        // Fetch from transfer status if not in list response
+        const status = await getTransferStatus(transfer.transfer_id);
+        ephemeralPubB64 = status.sender_ephemeral_pubkey;
       }
+      if (!ephemeralPubB64) throw new Error("Transfer has no ephemeral key. Cannot decrypt.");
+
+      const binary = atob(ephemeralPubB64);
+      const ephemeralPubBytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) ephemeralPubBytes[i] = binary.charCodeAt(i);
+
+      // Derive decryption key via ECDH + HKDF
+      const aesKey = await deriveReceiverKey(
+        myDevice.device_id,
+        ephemeralPubBytes,
+        transfer.transfer_id,
+      );
 
       setDownloadProgress({ received: 0 });
 
       const blob = await downloadFile(
-        downloadPrompt.transfer.transfer_id,
+        transfer.transfer_id,
         myDevice.node_id,
-        cryptoKey,
+        aesKey,
         (received) => {
           setDownloadProgress({ received });
         }
@@ -242,13 +270,13 @@ export default function Transfers() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = downloadPrompt.transfer.filename || "downloaded-file";
+      a.download = transfer.filename || "downloaded-file";
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
-      setDownloadPrompt(null);
+      toast.success("File downloaded and decrypted");
     } catch (err: any) {
       setError(err?.response?.data?.error || err.message || "Failed to download or decrypt file");
     } finally {
@@ -448,8 +476,9 @@ export default function Transfers() {
                     {/* Actions */}
                     {!isSender && t.status === "TRANSFER_STATUS_COMPLETED" && (
                       <button
-                        onClick={() => setDownloadPrompt({ transfer: t, keyInput: "" })}
-                        className="text-xs text-gray-400 hover:text-gray-200 transition-colors"
+                        onClick={() => handleDownload(t)}
+                        disabled={downloading}
+                        className="text-xs text-gray-400 hover:text-gray-200 disabled:opacity-40 transition-colors"
                       >
                         Download
                       </button>
@@ -483,39 +512,6 @@ export default function Transfers() {
             )}
           </div>
         )
-      )}
-
-      {/* Share key modal */}
-      {shareKey && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-[2px] flex items-center justify-center z-50" onClick={() => setShareKey(null)}>
-          <div className="bg-gray-900/95 border border-gray-800/70 rounded-xl p-6 w-full max-w-md space-y-4 shadow-[0_20px_40px_rgba(0,0,0,0.45)]" onClick={(e) => e.stopPropagation()}>
-            <div>
-              <h2 className="text-base font-medium text-gray-100">Decryption Key</h2>
-              <p className="text-xs text-gray-500 mt-1">Send this key to the recipient through a secure channel. The server never sees it.</p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500 mb-2">AES-256-GCM key</p>
-              <div className="bg-gray-800/80 border border-gray-700/50 rounded-md p-3">
-                <p className="text-xs text-gray-300 font-mono break-all select-all">{shareKey.key}</p>
-              </div>
-            </div>
-            <p className="text-xs text-yellow-600">This key is stored locally in your browser. If you lose it, the file cannot be decrypted.</p>
-            <div className="flex gap-2 justify-end">
-              <button
-                onClick={() => navigator.clipboard?.writeText(shareKey.key)}
-                className="px-3 py-1.5 rounded-md bg-gray-800/80 border border-gray-700/50 text-sm text-gray-300 hover:text-gray-100 transition-colors"
-              >
-                Copy
-              </button>
-              <button
-                onClick={() => setShareKey(null)}
-                className="px-4 py-1.5 rounded-md bg-gray-100 text-gray-900 text-sm font-medium hover:bg-white transition-colors"
-              >
-                Done
-              </button>
-            </div>
-          </div>
-        </div>
       )}
 
       {/* Send File Modal */}
@@ -594,7 +590,7 @@ export default function Transfers() {
 
             {/* E2E notice */}
             <p className="text-xs text-gray-600">
-              Files are encrypted in your browser before upload. The encryption key is never sent to the server.
+              Encryption keys are derived automatically via X25519 ECDH. No manual key sharing needed.
             </p>
 
             <div className="flex gap-2 justify-end">
@@ -613,48 +609,6 @@ export default function Transfers() {
         </div>
       )}
 
-      {/* Download/Decrypt Modal */}
-      {downloadPrompt && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-[2px] flex items-center justify-center z-50" onClick={() => !downloading && setDownloadPrompt(null)}>
-          <div className="bg-gray-900/95 border border-gray-800/70 rounded-xl p-6 w-full max-w-md space-y-4 shadow-[0_20px_40px_rgba(0,0,0,0.45)]" onClick={(e) => e.stopPropagation()}>
-            <div>
-              <h2 className="text-base font-medium text-gray-100">Decrypt & Download</h2>
-              <p className="text-xs text-gray-500 mt-1">
-                Enter the decryption key for <span className="text-gray-300">{downloadPrompt.transfer.filename}</span>
-              </p>
-            </div>
-
-            <div>
-              <p className="text-xs text-gray-500 mb-2">AES-256-GCM Key</p>
-              <input
-                type="text"
-                autoFocus
-                placeholder="Paste the base64 key..."
-                value={downloadPrompt.keyInput}
-                onChange={(e) => setDownloadPrompt({ ...downloadPrompt, keyInput: e.target.value })}
-                className="w-full bg-gray-800/80 border border-gray-700/50 rounded-md p-3 text-sm text-gray-200 placeholder-gray-600 font-mono focus:outline-none focus:border-gray-600 transition-colors"
-              />
-            </div>
-
-            <div className="flex gap-2 justify-end">
-              <button
-                onClick={() => setDownloadPrompt(null)}
-                disabled={downloading}
-                className="px-3 py-1.5 rounded-md text-sm text-gray-500 hover:text-gray-300 disabled:opacity-40 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={processDownload}
-                disabled={!downloadPrompt.keyInput.trim() || downloading}
-                className="px-5 py-1.5 rounded-md bg-gray-100 text-gray-900 text-sm font-medium hover:bg-white disabled:opacity-40 transition-colors"
-              >
-                {downloading ? "Decrypting..." : "Download"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -11,6 +11,7 @@ import {
   approvePairing,
 } from "../lib/device-api";
 import { getDeviceFingerprint, guessDeviceType } from "../lib/fingerprint";
+import { ensureDeviceKeys } from "../lib/device-key";
 
 const typeLabel: Record<string, string> = {
   pc: "Computer",
@@ -18,11 +19,16 @@ const typeLabel: Record<string, string> = {
   tablet: "Tablet",
 };
 
-const typeIcon: Record<string, string> = {
-  pc: "💻",
-  phone: "📱",
-  tablet: "📋",
-};
+function DeviceIcon({ type, className = "w-4 h-4" }: { type: string; className?: string }) {
+  switch (type) {
+    case "phone":
+      return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" /><line x1="12" y1="18" x2="12" y2="18.01" /></svg>;
+    case "tablet":
+      return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="2" width="16" height="20" rx="2" /><line x1="12" y1="18" x2="12" y2="18.01" /></svg>;
+    default:
+      return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" /><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" /></svg>;
+  }
+}
 
 function timeAgo(iso: string) {
   if (!iso) return "never";
@@ -100,11 +106,13 @@ export default function Devices() {
     setActionLoading(true);
     try {
       const fp = await getDeviceFingerprint();
-      await registerDevice({
+      const res = await registerDevice({
         name: addName,
         device_type: toProtoDeviceType(guessDeviceType()),
         fingerprint: fp,
       });
+      // Generate and upload X25519 device key for E2E transfers
+      try { await ensureDeviceKeys(res.device.device_id); } catch { /* key upload may fail if not yet approved */ }
       await fetchDevices();
       setModal(null);
       setAddName("");
@@ -297,7 +305,7 @@ export default function Devices() {
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <span className="text-base">{typeIcon[normalizeDeviceType(d.device_type)] || "💻"}</span>
+                    <DeviceIcon type={normalizeDeviceType(d.device_type)} className="w-4 h-4 text-gray-400" />
                     <span className="text-sm text-gray-200">{d.name}</span>
                     <span className="text-xs text-gray-600">{typeLabel[normalizeDeviceType(d.device_type)]}</span>
                   </div>

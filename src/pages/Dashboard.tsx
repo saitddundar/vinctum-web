@@ -7,11 +7,16 @@ import { normalizeDeviceType } from "../types/device";
 import type { Device, PeerSession } from "../types/device";
 import type { TransferInfo } from "../types/transfer";
 
-const deviceIcon: Record<string, string> = {
-  pc: "💻",
-  phone: "📱",
-  tablet: "📋",
-};
+function DeviceIcon({ type, className = "w-4 h-4" }: { type: string; className?: string }) {
+  switch (type) {
+    case "phone":
+      return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" /><line x1="12" y1="18" x2="12" y2="18.01" /></svg>;
+    case "tablet":
+      return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="2" width="16" height="20" rx="2" /><line x1="12" y1="18" x2="12" y2="18.01" /></svg>;
+    default:
+      return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" /><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" /></svg>;
+  }
+}
 
 const statusLabel: Record<string, string> = {
   TRANSFER_STATUS_PENDING: "Pending",
@@ -187,7 +192,7 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {approved.slice(0, 6).map((d) => (
               <div key={d.device_id} className="flex items-center gap-3 rounded-md border border-gray-800/40 bg-gray-900/50 px-4 py-3 hover:border-gray-700/70 hover:-translate-y-px transition-all duration-200">
-                <span className="text-base">{deviceIcon[normalizeDeviceType(d.device_type)] || "💻"}</span>
+                <DeviceIcon type={normalizeDeviceType(d.device_type)} className="w-4 h-4 text-gray-400" />
                 <span className="text-sm text-gray-300 truncate">{d.name}</span>
                 <span className="text-xs text-gray-600 ml-auto">{timeAgo(d.last_active)}</span>
               </div>

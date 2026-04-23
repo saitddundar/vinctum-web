@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useAuth } from "../context/AuthContext";
+import { changePassword } from "../lib/auth-api";
 
 export default function Account() {
   const { user, logout } = useAuth();
@@ -14,6 +15,14 @@ export default function Account() {
     sessions: false,
   });
 
+  // Password change
+  const [showPasswordForm, setShowPasswordForm] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordError, setPasswordError] = useState("");
+
   function handleLogout() {
     logout();
     toast.success("Signed out");
@@ -23,7 +32,7 @@ export default function Account() {
   function handleSaveName() {
     if (!displayName.trim() || displayName === user?.username) return;
     setSaving(true);
-    // placeholder — will hit API when backend supports it
+    // Will hit API when backend supports display name updates
     setTimeout(() => {
       setSaving(false);
       toast.success("Display name updated");
@@ -32,10 +41,39 @@ export default function Account() {
 
   function handleRevokeAll() {
     if (!confirm("Sign out of all devices? You'll need to sign in again everywhere.")) return;
-    // placeholder — will hit revoke-all-tokens endpoint
+    // Will hit revoke-all-tokens endpoint when backend supports it
     toast.success("All sessions revoked");
     logout();
     navigate("/login");
+  }
+
+  async function handleChangePassword(e: FormEvent) {
+    e.preventDefault();
+    setPasswordError("");
+
+    if (newPassword.length < 8) {
+      setPasswordError("Password must be at least 8 characters.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError("Passwords do not match.");
+      return;
+    }
+
+    setPasswordLoading(true);
+    try {
+      await changePassword(currentPassword, newPassword);
+      toast.success("Password updated");
+      setShowPasswordForm(false);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || "Failed to change password";
+      setPasswordError(msg);
+    } finally {
+      setPasswordLoading(false);
+    }
   }
 
   return (
@@ -99,10 +137,86 @@ export default function Account() {
           </div>
 
           <div className="border-t border-gray-800/40 pt-4 space-y-3">
-            <DetailRow label="User ID" value={user?.user_id || "—"} mono />
-            <DetailRow label="Email" value={user?.email || "—"} />
-            <DetailRow label="Member since" value={user?.created_at ? new Date(user.created_at).toLocaleDateString() : "—"} />
+            <DetailRow label="User ID" value={user?.user_id || "--"} mono />
+            <DetailRow label="Email" value={user?.email || "--"} />
+            <DetailRow label="Member since" value={user?.created_at ? new Date(user.created_at).toLocaleDateString() : "--"} />
           </div>
+        </section>
+
+        {/* Password */}
+        <section className="rounded-md border border-gray-800/40 bg-gray-900/50 p-6 space-y-4">
+          <p className="text-xs uppercase tracking-wider text-gray-500">Security</p>
+
+          {showPasswordForm ? (
+            <form onSubmit={handleChangePassword} className="space-y-3">
+              {passwordError && (
+                <div className="rounded-md bg-red-900/50 border border-red-800 px-3 py-2 text-xs text-red-300">
+                  {passwordError}
+                </div>
+              )}
+              <div>
+                <label className="text-xs text-gray-500">Current password</label>
+                <input
+                  type="password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  autoFocus
+                  required
+                  className="w-full mt-1 bg-gray-800/80 border border-gray-700/50 rounded-md px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-gray-600 transition-colors"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500">New password</label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  required
+                  placeholder="At least 8 characters"
+                  className="w-full mt-1 bg-gray-800/80 border border-gray-700/50 rounded-md px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-gray-600 transition-colors"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500">Confirm new password</label>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required
+                  className="w-full mt-1 bg-gray-800/80 border border-gray-700/50 rounded-md px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-gray-600 transition-colors"
+                />
+              </div>
+              <div className="flex gap-2 justify-end pt-1">
+                <button
+                  type="button"
+                  onClick={() => { setShowPasswordForm(false); setPasswordError(""); }}
+                  className="px-3 py-1.5 rounded-md text-sm text-gray-500 hover:text-gray-300 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={passwordLoading}
+                  className="px-4 py-1.5 rounded-md bg-gray-100 text-gray-900 text-sm font-medium hover:bg-white disabled:opacity-40 transition-colors"
+                >
+                  {passwordLoading ? "Updating..." : "Update password"}
+                </button>
+              </div>
+            </form>
+          ) : (
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-300">Password</p>
+                <p className="text-xs text-gray-600 mt-0.5">Change your account password</p>
+              </div>
+              <button
+                onClick={() => setShowPasswordForm(true)}
+                className="px-4 py-1.5 rounded-md bg-gray-800/80 border border-gray-700/50 text-xs text-gray-300 hover:text-gray-100 hover:border-gray-600 transition-all duration-200"
+              >
+                Change
+              </button>
+            </div>
+          )}
         </section>
 
         {/* Notifications */}
