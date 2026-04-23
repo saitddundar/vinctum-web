@@ -1,1 +1,103 @@
 @import "tailwindcss";
+
+/* ── Glassmorphism Card System ── */
+.glass-card {
+  background: rgba(17, 24, 39, 0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
+}
+.glass-card:hover {
+  border-color: rgba(52, 211, 153, 0.15);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transform: translateY(-1px);
+}
+
+.glass-card-static {
+  background: rgba(17, 24, 39, 0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+}
+
+/* ── Background Gradient Orbs ── */
+.bg-orb {
+  position: absolute;
+  border-radius: 9999px;
+  pointer-events: none;
+  animation: float-orb 20s ease-in-out infinite;
+}
+.bg-orb-emerald {
+  background: rgba(52, 211, 153, 0.045);
+  width: 500px;
+  height: 500px;
+  filter: blur(100px);
+}
+.bg-orb-cyan {
+  background: rgba(34, 211, 238, 0.035);
+  width: 400px;
+  height: 400px;
+  filter: blur(90px);
+}
+.bg-orb-violet {
+  background: rgba(139, 92, 246, 0.03);
+  width: 350px;
+  height: 350px;
+  filter: blur(80px);
+}
+
+/* ── Pipeline Animations ── */
+.pipeline-active {
+  box-shadow: 0 0 12px rgba(52, 211, 153, 0.25);
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* ── Drop Zone (Empty States) ── */
+.drop-zone {
+  border: 2px dashed rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  transition: border-color 0.2s;
+}
+.drop-zone:hover {
+  border-color: rgba(52, 211, 153, 0.3);
+}
+
+/* ── Keyframes ── */
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 8px rgba(52, 211, 153, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(52, 211, 153, 0.4);
+  }
+}
+
+@keyframes float-orb {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-30px);
+  }
+}
+
+@keyframes flow-dot {
+  0% {
+    offset-distance: 0%;
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    offset-distance: 100%;
+    opacity: 0;
+  }
+}
