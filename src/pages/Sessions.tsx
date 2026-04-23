@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { Users, X } from "lucide-react";
 import type { PeerSession, Device } from "../types/device";
 import { normalizeDeviceType } from "../types/device";
 import {
@@ -35,7 +36,6 @@ export default function Sessions() {
   const [newName, setNewName] = useState("");
   const [selectedDevice, setSelectedDevice] = useState("");
   const [creating, setCreating] = useState(false);
-  const [error, setError] = useState("");
   const [addDeviceSession, setAddDeviceSession] = useState<string | null>(null);
   const [addDeviceId, setAddDeviceId] = useState("");
 
@@ -45,7 +45,7 @@ export default function Sessions() {
       setSessions(sessRes.sessions);
       setDevices(devRes.devices.filter((d) => d.is_approved && !d.is_revoked));
     } catch (err: any) {
-      setError(err?.response?.data?.error || "Failed to load data");
+      toast.error(err?.response?.data?.error || "Failed to load data");
     } finally {
       setLoading(false);
     }
@@ -58,7 +58,6 @@ export default function Sessions() {
   async function handleCreate() {
     if (!newName || !selectedDevice) return;
     setCreating(true);
-    setError("");
     try {
       await createPeerSession({ name: newName, device_id: selectedDevice });
       await fetchData();
@@ -67,42 +66,39 @@ export default function Sessions() {
       setSelectedDevice("");
       toast.success("Session created");
     } catch (err: any) {
-      setError(err?.response?.data?.error || "Failed to create session");
+      toast.error(err?.response?.data?.error || "Failed to create session");
     } finally {
       setCreating(false);
     }
   }
 
   async function handleClose(sessionId: string) {
-    setError("");
     try {
       await closePeerSession(sessionId);
       await fetchData();
     } catch (err: any) {
-      setError(err?.response?.data?.error || "Failed to close session");
+      toast.error(err?.response?.data?.error || "Failed to close session");
     }
   }
 
   async function handleJoin(sessionId: string) {
     if (!addDeviceId) return;
-    setError("");
     try {
       await joinPeerSession(sessionId, addDeviceId);
       await fetchData();
       setAddDeviceSession(null);
       setAddDeviceId("");
     } catch (err: any) {
-      setError(err?.response?.data?.error || "Failed to join session");
+      toast.error(err?.response?.data?.error || "Failed to join session");
     }
   }
 
   async function handleLeave(sessionId: string, deviceId: string) {
-    setError("");
     try {
       await leavePeerSession(sessionId, deviceId);
       await fetchData();
     } catch (err: any) {
-      setError(err?.response?.data?.error || "Failed to leave session");
+      toast.error(err?.response?.data?.error || "Failed to leave session");
     }
   }
 
@@ -117,7 +113,7 @@ export default function Sessions() {
         <h1 className="text-xl font-medium text-gray-100">Sessions</h1>
         <div className="space-y-3">
           {[...Array(2)].map((_, i) => (
-            <div key={i} className="h-28 rounded-md bg-gray-900/50 border border-gray-800/40 animate-pulse" />
+            <div key={i} className="h-28 glass-card-static animate-pulse" />
           ))}
         </div>
       </div>
@@ -133,26 +129,20 @@ export default function Sessions() {
         </div>
         <button
           onClick={() => setShowCreate(true)}
-          className="px-3 py-1.5 rounded-md bg-gray-100 text-gray-900 text-sm font-medium hover:bg-white transition-colors"
+          className="px-3 py-1.5 rounded-md bg-emerald-500 text-gray-950 text-sm font-medium hover:bg-emerald-400 transition-colors"
         >
           New Session
         </button>
       </div>
 
-      {error && (
-        <div className="rounded-md border border-red-900/40 bg-red-950/30 px-4 py-3 flex items-center justify-between">
-          <p className="text-sm text-red-400">{error}</p>
-          <button onClick={() => setError("")} className="text-xs text-red-500 hover:text-red-300">Dismiss</button>
-        </div>
-      )}
-
       {sessions.length === 0 && !showCreate && (
-        <div className="rounded-md border border-gray-800/40 bg-gray-900/30 p-10 text-center">
+        <div className="drop-zone p-10 text-center">
+          <Users className="w-10 h-10 text-gray-700 mx-auto mb-3" />
           <p className="text-gray-400">No active sessions</p>
           <p className="text-xs text-gray-600 mt-1 mb-3">Create a session to group devices for file sharing</p>
           <button
             onClick={() => setShowCreate(true)}
-            className="px-4 py-1.5 rounded-md bg-gray-800/80 border border-gray-700/50 text-xs text-gray-300 hover:text-gray-100 hover:border-gray-600 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
+            className="px-4 py-1.5 rounded-md bg-emerald-500 text-gray-950 text-xs font-medium hover:bg-emerald-400 transition-colors"
           >
             Create your first session
           </button>
@@ -161,7 +151,7 @@ export default function Sessions() {
 
       {/* Create */}
       {showCreate && (
-        <div className="rounded-md border border-gray-800/40 bg-gray-900/50 p-5 space-y-4">
+        <div className="glass-card-static p-5 space-y-4">
           <p className="text-sm text-gray-300">New Session</p>
           <input
             type="text"
@@ -169,7 +159,7 @@ export default function Sessions() {
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             autoFocus
-            className="w-full bg-gray-800/80 border border-gray-700/50 rounded-md px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-gray-600"
+            className="w-full bg-gray-800/80 border border-gray-700/50 rounded-md px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/30"
           />
           <div>
             <p className="text-xs text-gray-500 mb-2">Initial device</p>
@@ -179,7 +169,7 @@ export default function Sessions() {
                   key={d.device_id}
                   className={`flex items-center justify-between rounded-md border px-3 py-2 cursor-pointer transition-colors ${
                     selectedDevice === d.device_id
-                      ? "border-gray-600 bg-gray-800/60"
+                      ? "border-emerald-500/30 bg-emerald-500/5"
                       : "border-gray-800/40 bg-gray-800/30 hover:border-gray-700"
                   }`}
                 >
@@ -195,7 +185,7 @@ export default function Sessions() {
                     <span className="text-sm text-gray-200">{d.name}</span>
                     <span className="text-xs text-gray-600">{typeLabel[normalizeDeviceType(d.device_type)]}</span>
                   </div>
-                  {selectedDevice === d.device_id && <span className="w-2 h-2 rounded-full bg-gray-300" />}
+                  {selectedDevice === d.device_id && <span className="w-2 h-2 rounded-full bg-emerald-400" />}
                 </label>
               ))}
             </div>
@@ -207,7 +197,7 @@ export default function Sessions() {
             <button
               onClick={handleCreate}
               disabled={!newName || !selectedDevice || creating}
-              className="px-4 py-1.5 rounded-md bg-gray-100 text-gray-900 text-sm font-medium hover:bg-white disabled:opacity-40 transition-colors"
+              className="px-4 py-1.5 rounded-md bg-emerald-500 text-gray-950 text-sm font-medium hover:bg-emerald-400 disabled:opacity-40 transition-colors"
             >
               {creating ? "Creating..." : "Create"}
             </button>
@@ -222,7 +212,7 @@ export default function Sessions() {
           const isAdding = addDeviceSession === session.session_id;
 
           return (
-            <div key={session.session_id} className="rounded-md border border-gray-800/40 bg-gray-900/50 p-4 space-y-3 hover:border-gray-700/70 hover:-translate-y-px transition-all duration-200">
+            <div key={session.session_id} className="glass-card p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-200">{session.name}</p>
@@ -234,7 +224,7 @@ export default function Sessions() {
                   {available.length > 0 && (
                     <button
                       onClick={() => { setAddDeviceSession(isAdding ? null : session.session_id); setAddDeviceId(""); }}
-                      className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+                      className="text-xs text-gray-500 hover:text-emerald-400 transition-colors"
                     >
                       {isAdding ? "Cancel" : "Add device"}
                     </button>
@@ -256,7 +246,7 @@ export default function Sessions() {
                       key={d.device_id}
                       className={`rounded-md border px-3 py-1.5 cursor-pointer text-xs transition-colors ${
                         addDeviceId === d.device_id
-                          ? "border-gray-600 bg-gray-800/60 text-gray-200"
+                          ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-400"
                           : "border-gray-800/40 text-gray-500 hover:border-gray-700"
                       }`}
                     >
@@ -274,7 +264,7 @@ export default function Sessions() {
                   <button
                     onClick={() => handleJoin(session.session_id)}
                     disabled={!addDeviceId}
-                    className="px-3 py-1 rounded-md bg-gray-800 hover:bg-gray-700 text-xs text-gray-300 disabled:opacity-40 transition-colors"
+                    className="px-3 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 text-xs text-emerald-400 disabled:opacity-40 transition-colors"
                   >
                     Add
                   </button>
@@ -293,9 +283,7 @@ export default function Sessions() {
                         className="text-gray-700 hover:text-red-400 transition-colors ml-1"
                         title="Remove"
                       >
-                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                        </svg>
+                        <X className="w-3 h-3" />
                       </button>
                     </div>
                   ))}

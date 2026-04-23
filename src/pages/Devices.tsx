@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { Monitor, Smartphone, Tablet, MonitorSmartphone } from "lucide-react";
 import type { Device } from "../types/device";
 import { normalizeDeviceType, toProtoDeviceType } from "../types/device";
 import {
@@ -21,12 +22,9 @@ const typeLabel: Record<string, string> = {
 
 function DeviceIcon({ type, className = "w-4 h-4" }: { type: string; className?: string }) {
   switch (type) {
-    case "phone":
-      return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" /><line x1="12" y1="18" x2="12" y2="18.01" /></svg>;
-    case "tablet":
-      return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="2" width="16" height="20" rx="2" /><line x1="12" y1="18" x2="12" y2="18.01" /></svg>;
-    default:
-      return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" /><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" /></svg>;
+    case "phone": return <Smartphone className={className} />;
+    case "tablet": return <Tablet className={className} />;
+    default: return <Monitor className={className} />;
   }
 }
 
@@ -111,8 +109,7 @@ export default function Devices() {
         device_type: toProtoDeviceType(guessDeviceType()),
         fingerprint: fp,
       });
-      // Generate and upload X25519 device key for E2E transfers
-      try { await ensureDeviceKeys(res.device.device_id); } catch { /* key upload may fail if not yet approved */ }
+      try { await ensureDeviceKeys(res.device.device_id); } catch {}
       await fetchDevices();
       setModal(null);
       setAddName("");
@@ -198,7 +195,7 @@ export default function Devices() {
         <h1 className="text-xl font-medium text-gray-100">Devices</h1>
         <div className="space-y-2">
           {[...Array(3)].map((_, i) => (
-            <div key={i} className="h-16 rounded-md bg-gray-900/50 border border-gray-800/40 animate-pulse" />
+            <div key={i} className="h-16 glass-card-static animate-pulse" />
           ))}
         </div>
       </div>
@@ -215,19 +212,19 @@ export default function Devices() {
         <div className="flex gap-2">
           <button
             onClick={() => setModal("add-this")}
-            className="px-3 py-1.5 rounded-md bg-gray-100 text-gray-900 text-sm font-medium hover:bg-white transition-colors"
+            className="px-3 py-1.5 rounded-md bg-emerald-500 text-gray-950 text-sm font-medium hover:bg-emerald-400 transition-colors"
           >
             Register This Device
           </button>
           <button
             onClick={handleGeneratePairingCode}
-            className="px-3 py-1.5 rounded-md bg-gray-800/80 border border-gray-700/50 text-sm text-gray-300 hover:text-gray-100 transition-colors"
+            className="px-3 py-1.5 rounded-md border border-gray-700/50 bg-transparent text-sm text-gray-300 hover:text-gray-100 hover:border-emerald-500/30 transition-colors"
           >
             Pairing Code
           </button>
           <button
             onClick={() => setModal("pairing-redeem")}
-            className="px-3 py-1.5 rounded-md bg-gray-800/80 border border-gray-700/50 text-sm text-gray-300 hover:text-gray-100 transition-colors"
+            className="px-3 py-1.5 rounded-md border border-gray-700/50 bg-transparent text-sm text-gray-300 hover:text-gray-100 hover:border-emerald-500/30 transition-colors"
           >
             Join With Code
           </button>
@@ -240,8 +237,8 @@ export default function Devices() {
         <MetricCard label="Revoked" value={revokedDevices.length} hint="Access removed" />
       </div>
 
-      <div className="rounded-xl border border-gray-800/50 bg-gradient-to-b from-gray-900/70 to-gray-900/40 px-4 py-3 shadow-[0_8px_24px_rgba(0,0,0,0.28)]">
-        <p className="text-xs uppercase tracking-wider text-gray-500 mb-2">Pairing Process</p>
+      <div className="glass-card-static p-4">
+        <p className="text-xs uppercase tracking-wider text-gray-500 mb-3">Pairing Process</p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <ProcessStep title="1. Generate" description="Create one-time pairing code on an approved device." />
           <ProcessStep title="2. Redeem" description="Enter code from the new device and submit fingerprint." />
@@ -251,7 +248,7 @@ export default function Devices() {
 
       {/* Pending approvals */}
       {pendingDevices.length > 0 && (
-        <div className="rounded-xl border border-yellow-900/40 bg-yellow-950/20 p-4 space-y-3 shadow-[0_8px_24px_rgba(0,0,0,0.2)]">
+        <div className="rounded-xl border border-yellow-900/40 bg-yellow-950/20 p-4 space-y-3">
           <p className="text-xs text-yellow-500 uppercase tracking-wider">Pending Approval</p>
           {pendingDevices.map((d) => (
             <div key={d.device_id} className="flex items-center justify-between rounded-lg border border-yellow-900/20 bg-yellow-950/10 px-3 py-2">
@@ -262,7 +259,7 @@ export default function Devices() {
               <div className="flex gap-2">
                 <button
                   onClick={() => handleApprove(d.device_id, true)}
-                  className="px-3 py-1 rounded-md bg-gray-800 hover:bg-gray-700 text-xs text-gray-300 transition-colors"
+                  className="px-3 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 text-xs text-emerald-400 transition-colors"
                 >
                   Approve
                 </button>
@@ -282,12 +279,13 @@ export default function Devices() {
         {/* Device list */}
         <div className="flex-1 space-y-2">
           {activeDevices.length === 0 ? (
-            <div className="rounded-md border border-gray-800/40 bg-gray-900/30 p-10 text-center">
+            <div className="drop-zone p-10 text-center">
+              <MonitorSmartphone className="w-10 h-10 text-gray-700 mx-auto mb-3" />
               <p className="text-gray-400">No devices registered</p>
               <p className="text-xs text-gray-600 mt-1 mb-3">Add this device or pair a remote one to get started</p>
               <button
                 onClick={() => setModal("add-this")}
-                className="px-4 py-1.5 rounded-md bg-gray-800/80 border border-gray-700/50 text-xs text-gray-300 hover:text-gray-100 hover:border-gray-600 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
+                className="px-4 py-1.5 rounded-md bg-emerald-500 text-gray-950 text-xs font-medium hover:bg-emerald-400 transition-colors"
               >
                 Register this device
               </button>
@@ -297,11 +295,12 @@ export default function Devices() {
               <button
                 key={d.device_id}
                 onClick={() => setSelected(selected?.device_id === d.device_id ? null : d)}
-                className={`w-full text-left rounded-xl border px-4 py-3 transition-all duration-200 hover:scale-[1.005] ${
+                className={`w-full text-left rounded-xl transition-all duration-200 hover:scale-[1.005] ${
                   selected?.device_id === d.device_id
-                    ? "border-gray-600 bg-gray-800/70 shadow-[0_0_0_1px_rgba(156,163,175,0.12)]"
-                    : "border-gray-800/40 bg-gray-900/50 hover:border-gray-700/80 hover:-translate-y-[1px]"
-                }`}
+                    ? "glass-card border-emerald-500/30"
+                    : "glass-card"
+                } px-4 py-3`}
+                style={selected?.device_id === d.device_id ? { borderColor: "rgba(52, 211, 153, 0.3)" } : {}}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -321,7 +320,7 @@ export default function Devices() {
 
         {/* Detail panel */}
         {selected && (
-          <div className="w-72 shrink-0 rounded-xl border border-gray-800/50 bg-gradient-to-b from-gray-900/80 to-gray-900/50 p-5 space-y-5 self-start shadow-[0_12px_30px_rgba(0,0,0,0.32)]">
+          <div className="w-72 shrink-0 glass-card-static p-5 space-y-5 self-start">
             <div className="flex items-center justify-between">
               <p className="text-sm font-medium text-gray-200">{selected.name}</p>
               <button onClick={() => setSelected(null)} className="text-xs text-gray-600 hover:text-gray-400">
@@ -353,7 +352,7 @@ export default function Devices() {
 
             <button
               onClick={() => handleRevoke(selected.device_id)}
-              className="w-full px-3 py-1.5 rounded-md text-xs text-gray-500 hover:text-red-400 border border-gray-800/40 hover:border-red-900/50 transition-colors"
+              className="w-full px-3 py-1.5 rounded-md text-xs text-red-400 border border-red-900/30 hover:border-red-400/30 hover:bg-red-400/5 transition-colors"
             >
               Revoke Device
             </button>
@@ -363,8 +362,8 @@ export default function Devices() {
 
       {/* Modals */}
       {modal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-[2px] flex items-center justify-center z-50" onClick={() => setModal(null)}>
-          <div className="bg-gray-900/95 border border-gray-800/70 rounded-xl p-6 w-full max-w-sm space-y-4 shadow-[0_20px_40px_rgba(0,0,0,0.45)]" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => setModal(null)}>
+          <div className="glass-card-static p-6 w-full max-w-sm space-y-4 shadow-[0_20px_40px_rgba(0,0,0,0.45)]" onClick={(e) => e.stopPropagation()}>
             {modal === "add-this" && (
               <>
                 <div>
@@ -377,7 +376,7 @@ export default function Devices() {
                   value={addName}
                   onChange={(e) => setAddName(e.target.value)}
                   autoFocus
-                  className="w-full bg-gray-800/80 border border-gray-700/50 rounded-md px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-gray-600"
+                  className="w-full bg-gray-800/80 border border-gray-700/50 rounded-md px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/30"
                 />
                 <div className="text-xs text-gray-600 space-y-1">
                   <p>Type: {typeLabel[guessDeviceType()]}</p>
@@ -390,7 +389,7 @@ export default function Devices() {
                   <button
                     onClick={handleAddThisDevice}
                     disabled={!addName || actionLoading}
-                    className="px-4 py-1.5 rounded-md bg-gray-100 text-gray-900 text-sm font-medium hover:bg-white disabled:opacity-40 transition-colors"
+                    className="px-4 py-1.5 rounded-md bg-emerald-500 text-gray-950 text-sm font-medium hover:bg-emerald-400 disabled:opacity-40 transition-colors"
                   >
                     {actionLoading ? "Adding..." : "Add"}
                   </button>
@@ -405,7 +404,7 @@ export default function Devices() {
                   <p className="text-xs text-gray-500 mt-1">Enter this code on the device you want to pair</p>
                 </div>
                 <div className="text-center py-6">
-                  <p className="text-3xl font-mono font-medium tracking-[0.4em] text-gray-100">{pairingCode}</p>
+                  <p className="text-3xl font-mono font-medium tracking-[0.4em] text-emerald-400">{pairingCode}</p>
                 </div>
                 <div className="text-center">
                   {pairingExpiry > 0 ? (
@@ -416,7 +415,7 @@ export default function Devices() {
                     <p className="text-xs text-red-400/80">Code expired</p>
                   )}
                 </div>
-                <button onClick={() => setModal(null)} className="w-full px-3 py-1.5 rounded-md bg-gray-800/80 border border-gray-700/50 text-sm text-gray-300 hover:text-gray-100 transition-colors">
+                <button onClick={() => setModal(null)} className="w-full px-3 py-1.5 rounded-md border border-gray-700/50 bg-transparent text-sm text-gray-300 hover:text-gray-100 hover:border-emerald-500/30 transition-colors">
                   Close
                 </button>
               </>
@@ -434,7 +433,7 @@ export default function Devices() {
                   value={redeemCode}
                   onChange={(e) => setRedeemCode(e.target.value.toUpperCase().slice(0, 6))}
                   autoFocus
-                  className="w-full bg-gray-800/80 border border-gray-700/50 rounded-md px-3 py-2 text-sm text-center font-mono text-lg tracking-[0.3em] text-gray-200 placeholder-gray-600 focus:outline-none focus:border-gray-600"
+                  className="w-full bg-gray-800/80 border border-gray-700/50 rounded-md px-3 py-2 text-sm text-center font-mono text-lg tracking-[0.3em] text-gray-200 placeholder-gray-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/30"
                   maxLength={6}
                 />
                 <input
@@ -442,7 +441,7 @@ export default function Devices() {
                   placeholder="Device name"
                   value={redeemName}
                   onChange={(e) => setRedeemName(e.target.value)}
-                  className="w-full bg-gray-800/80 border border-gray-700/50 rounded-md px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-gray-600"
+                  className="w-full bg-gray-800/80 border border-gray-700/50 rounded-md px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/30"
                 />
                 <div className="flex gap-2 justify-end">
                   <button onClick={() => setModal(null)} className="px-3 py-1.5 rounded-md text-sm text-gray-500 hover:text-gray-300 transition-colors">
@@ -451,7 +450,7 @@ export default function Devices() {
                   <button
                     onClick={handleRedeemCode}
                     disabled={redeemCode.length !== 6 || !redeemName || actionLoading}
-                    className="px-4 py-1.5 rounded-md bg-gray-100 text-gray-900 text-sm font-medium hover:bg-white disabled:opacity-40 transition-colors"
+                    className="px-4 py-1.5 rounded-md bg-emerald-500 text-gray-950 text-sm font-medium hover:bg-emerald-400 disabled:opacity-40 transition-colors"
                   >
                     {actionLoading ? "Submitting..." : "Submit"}
                   </button>
@@ -476,17 +475,17 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 
 function MetricCard({ label, value, hint }: { label: string; value: number; hint: string }) {
   return (
-    <div className="rounded-xl border border-gray-800/50 bg-gradient-to-b from-gray-900/80 to-gray-900/50 px-4 py-3 shadow-[0_8px_22px_rgba(0,0,0,0.22)]">
-      <p className="text-xs uppercase tracking-wider text-gray-500">{label}</p>
-      <p className="text-2xl text-gray-100 font-light mt-1">{value}</p>
-      <p className="text-xs text-gray-600">{hint}</p>
+    <div className="glass-card-static px-4 py-3">
+      <p className="text-4xl font-bold text-gray-50">{value}</p>
+      <p className="text-xs uppercase tracking-wider text-gray-500 mt-1">{label}</p>
+      <p className="text-xs text-gray-600 mt-1">{hint}</p>
     </div>
   );
 }
 
 function ProcessStep({ title, description }: { title: string; description: string }) {
   return (
-    <div className="rounded-lg border border-gray-800/50 bg-gray-900/60 p-3">
+    <div className="rounded-lg border border-emerald-500/10 bg-emerald-500/5 p-3">
       <p className="text-sm text-gray-200">{title}</p>
       <p className="text-xs text-gray-600 mt-1 leading-relaxed">{description}</p>
     </div>
