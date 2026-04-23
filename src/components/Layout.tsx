@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
+import { LayoutDashboard, Monitor, Users, Send, Menu, X, LogOut } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 
 const navItems = [
-  { to: "/dashboard", label: "Overview" },
-  { to: "/devices", label: "Devices" },
-  { to: "/sessions", label: "Sessions" },
-  { to: "/transfers", label: "File Sharing" },
+  { to: "/dashboard", label: "Overview", icon: LayoutDashboard },
+  { to: "/devices", label: "Devices", icon: Monitor },
+  { to: "/sessions", label: "Sessions", icon: Users },
+  { to: "/transfers", label: "File Sharing", icon: Send },
 ];
 
 export default function Layout() {
@@ -31,7 +32,7 @@ export default function Layout() {
 
       {/* Sidebar */}
       <aside
-        className={`w-52 border-r border-gray-800/40 bg-gray-950 flex flex-col fixed inset-y-0 left-0 z-50 transition-transform duration-200 ${
+        className={`w-52 border-r border-gray-800/40 bg-gray-950/90 backdrop-blur-sm flex flex-col fixed inset-y-0 left-0 z-50 transition-transform duration-200 ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         } md:translate-x-0`}
       >
@@ -43,9 +44,7 @@ export default function Layout() {
             onClick={() => setSidebarOpen(false)}
             className="md:hidden text-gray-500 hover:text-gray-300 transition-colors"
           >
-            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
+            <X className="w-5 h-5" />
           </button>
         </div>
 
@@ -57,13 +56,14 @@ export default function Layout() {
               end={item.to === "/"}
               onClick={() => setSidebarOpen(false)}
               className={({ isActive }) =>
-                `block px-3 py-2 rounded-md text-sm transition-colors ${
+                `flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-all duration-200 ${
                   isActive
-                    ? "bg-gray-800/60 text-gray-100"
-                    : "text-gray-500 hover:text-gray-300"
+                    ? "bg-emerald-500/10 text-emerald-400 border-l-2 border-emerald-400 ml-0"
+                    : "text-gray-500 hover:text-gray-300 border-l-2 border-transparent"
                 }`
               }
             >
+              <item.icon className="w-4 h-4" />
               {item.label}
             </NavLink>
           ))}
@@ -76,28 +76,34 @@ export default function Layout() {
           </div>
           <button
             onClick={handleLogout}
-            className="w-full px-3 py-2 rounded-md text-sm text-gray-500 hover:text-red-400 transition-colors text-left"
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-gray-500 hover:text-red-400 hover:bg-red-500/5 transition-all duration-200 text-left"
           >
+            <LogOut className="w-4 h-4" />
             Logout
           </button>
         </div>
       </aside>
 
-      <main className="flex-1 md:ml-52">
+      <main className="flex-1 md:ml-52 relative">
+        {/* Background orbs */}
+        <div className="fixed inset-0 md:left-52 pointer-events-none overflow-hidden">
+          <div className="bg-orb bg-orb-emerald" style={{ top: "10%", right: "15%" }} />
+          <div className="bg-orb bg-orb-cyan" style={{ bottom: "20%", left: "10%" }} />
+          <div className="bg-orb bg-orb-violet" style={{ top: "60%", right: "40%" }} />
+        </div>
+
         {/* Mobile header */}
-        <div className="sticky top-0 z-30 md:hidden flex items-center h-14 px-4 border-b border-gray-800/40 bg-gray-950">
+        <div className="sticky top-0 z-30 md:hidden flex items-center h-14 px-4 border-b border-gray-800/40 bg-gray-950/90 backdrop-blur-sm">
           <button
             onClick={() => setSidebarOpen(true)}
             className="text-gray-400 hover:text-gray-200 transition-colors"
           >
-            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" />
-            </svg>
+            <Menu className="w-5 h-5" />
           </button>
           <span className="ml-3 text-sm font-medium text-gray-300">vinctum</span>
         </div>
 
-        <div className="max-w-4xl mx-auto px-4 md:px-8 py-6 md:py-8">
+        <div className="relative max-w-4xl mx-auto px-4 md:px-8 py-6 md:py-8">
           <Outlet />
         </div>
       </main>
