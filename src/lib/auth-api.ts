@@ -31,3 +31,18 @@ export async function resendVerification(email: string): Promise<{ success: bool
   const { data } = await api.post("/v1/auth/resend-verification", { email });
   return data;
 }
+
+export async function forgotPassword(email: string): Promise<{ success: boolean; message: string }> {
+  const { data } = await api.post("/v1/auth/forgot-password", { email });
+  return data;
+}
+
+export async function resetPassword(token: string, newPassword: string): Promise<{ success: boolean; message: string }> {
+  const { data } = await api.post("/v1/auth/reset-password", { token, new_password: newPassword });
+  return data;
+}
+
+export async function changePassword(currentPassword: string, newPassword: string): Promise<{ success: boolean; message: string }> {
+  const { data } = await api.post("/v1/auth/change-password", { current_password: currentPassword, new_password: newPassword });
+  return data;
+}
