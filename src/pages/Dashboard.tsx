@@ -1,20 +1,19 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { Monitor, Smartphone, Tablet, FileUp, MonitorSmartphone, Send, Plus, Users } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { listDevices, listPeerSessions } from "../lib/device-api";
 import { listTransfers } from "../lib/transfer-api";
 import { normalizeDeviceType } from "../types/device";
 import type { Device, PeerSession } from "../types/device";
 import type { TransferInfo } from "../types/transfer";
+import NetworkMesh from "../components/NetworkMesh";
 
 function DeviceIcon({ type, className = "w-4 h-4" }: { type: string; className?: string }) {
   switch (type) {
-    case "phone":
-      return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" /><line x1="12" y1="18" x2="12" y2="18.01" /></svg>;
-    case "tablet":
-      return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="2" width="16" height="20" rx="2" /><line x1="12" y1="18" x2="12" y2="18.01" /></svg>;
-    default:
-      return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" /><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" /></svg>;
+    case "phone": return <Smartphone className={className} />;
+    case "tablet": return <Tablet className={className} />;
+    default: return <Monitor className={className} />;
   }
 }
 
@@ -28,7 +27,7 @@ const statusLabel: Record<string, string> = {
 
 const statusDot: Record<string, string> = {
   TRANSFER_STATUS_PENDING: "bg-yellow-500",
-  TRANSFER_STATUS_IN_PROGRESS: "bg-blue-400",
+  TRANSFER_STATUS_IN_PROGRESS: "bg-emerald-400",
   TRANSFER_STATUS_COMPLETED: "bg-emerald-400",
   TRANSFER_STATUS_FAILED: "bg-red-400",
   TRANSFER_STATUS_CANCELLED: "bg-gray-500",
@@ -94,16 +93,10 @@ export default function Dashboard() {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {[...Array(3)].map((_, i) => (
-            <div key={i} className="rounded-md border border-gray-800/40 bg-gray-900/50 p-5 space-y-3 animate-pulse">
-              <div className="h-3 bg-gray-800/50 rounded w-20" />
-              <div className="h-8 bg-gray-800/40 rounded w-12" />
+            <div key={i} className="glass-card-static p-5 space-y-3 animate-pulse">
+              <div className="h-10 bg-gray-800/40 rounded w-12" />
               <div className="h-3 bg-gray-800/30 rounded w-28" />
             </div>
-          ))}
-        </div>
-        <div className="space-y-2">
-          {[...Array(3)].map((_, i) => (
-            <div key={i} className="h-14 rounded-md border border-gray-800/40 bg-gray-900/50 animate-pulse" />
           ))}
         </div>
       </div>
@@ -121,47 +114,50 @@ export default function Dashboard() {
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Link to="/devices" className="group rounded-md border border-gray-800/40 bg-gray-900/50 p-5 hover:border-gray-700 hover:-translate-y-px transition-all duration-200">
-          <p className="text-xs text-gray-500 uppercase tracking-wider">Devices</p>
-          <p className="text-2xl font-light text-gray-100 mt-2">{approved.length}</p>
+        <Link to="/devices" className="group glass-card p-5">
+          <p className="text-4xl font-bold text-gray-50">{approved.length}</p>
+          <p className="text-xs text-gray-500 uppercase tracking-wider mt-1">Devices</p>
           {pending.length > 0 ? (
-            <p className="text-xs text-yellow-500 mt-1">{pending.length} pending approval</p>
+            <p className="text-xs text-yellow-500 mt-2">{pending.length} pending approval</p>
           ) : (
-            <p className="text-xs text-gray-600 mt-1">All approved</p>
+            <p className="text-xs text-gray-600 mt-2">All approved</p>
           )}
         </Link>
 
-        <Link to="/sessions" className="group rounded-md border border-gray-800/40 bg-gray-900/50 p-5 hover:border-gray-700 hover:-translate-y-px transition-all duration-200">
-          <p className="text-xs text-gray-500 uppercase tracking-wider">Active Sessions</p>
-          <p className="text-2xl font-light text-gray-100 mt-2">{activeSessions.length}</p>
-          <p className="text-xs text-gray-600 mt-1">
+        <Link to="/sessions" className="group glass-card p-5">
+          <p className="text-4xl font-bold text-gray-50">{activeSessions.length}</p>
+          <p className="text-xs text-gray-500 uppercase tracking-wider mt-1">Active Sessions</p>
+          <p className="text-xs text-gray-600 mt-2">
             {activeSessions.length > 0
               ? `${activeSessions.reduce((sum, s) => sum + s.devices.length, 0)} connected devices`
               : "No active sessions"}
           </p>
         </Link>
 
-        <Link to="/transfers" className="group rounded-md border border-gray-800/40 bg-gray-900/50 p-5 hover:border-gray-700 hover:-translate-y-px transition-all duration-200">
-          <p className="text-xs text-gray-500 uppercase tracking-wider">Transfers</p>
-          <p className="text-2xl font-light text-gray-100 mt-2">{transfers.length}</p>
-          <p className="text-xs text-gray-600 mt-1">
+        <Link to="/transfers" className="group glass-card p-5">
+          <p className="text-4xl font-bold text-gray-50">{transfers.length}</p>
+          <p className="text-xs text-gray-500 uppercase tracking-wider mt-1">Transfers</p>
+          <p className="text-xs text-gray-600 mt-2">
             {transfers.filter((t) => t.status === "TRANSFER_STATUS_COMPLETED").length} completed
           </p>
         </Link>
       </div>
 
+      {/* Network Mesh */}
+      <NetworkMesh devices={devices} sessions={sessions} />
+
       {/* Recent Transfers */}
       <div>
         <div className="flex items-center justify-between mb-3">
           <p className="text-sm text-gray-400">Recent Transfers</p>
-          <Link to="/transfers" className="text-xs text-gray-500 hover:text-gray-300 transition-colors">
+          <Link to="/transfers" className="text-xs text-gray-500 hover:text-emerald-400 transition-colors">
             View all
           </Link>
         </div>
         {recentTransfers.length > 0 ? (
           <div className="space-y-2">
             {recentTransfers.map((t) => (
-              <div key={t.transfer_id} className="flex items-center gap-3 rounded-md border border-gray-800/40 bg-gray-900/50 px-4 py-3 hover:border-gray-700/70 hover:-translate-y-px transition-all duration-200">
+              <div key={t.transfer_id} className="glass-card flex items-center gap-3 px-4 py-3">
                 <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${statusDot[t.status] || "bg-gray-500"}`} />
                 <span className="text-sm text-gray-300 truncate flex-1">{t.filename}</span>
                 <span className="text-xs text-gray-600">{formatBytes(t.total_size_bytes)}</span>
@@ -171,9 +167,10 @@ export default function Dashboard() {
             ))}
           </div>
         ) : (
-          <div className="rounded-md border border-gray-800/40 bg-gray-900/30 p-6 text-center">
+          <div className="drop-zone p-10 text-center">
+            <FileUp className="w-10 h-10 text-gray-700 mx-auto mb-3" />
             <p className="text-gray-500 text-sm">No transfers yet</p>
-            <Link to="/transfers" className="inline-block mt-2 px-4 py-1.5 rounded-md bg-gray-800/80 border border-gray-700/50 text-xs text-gray-300 hover:text-gray-100 hover:border-gray-600 hover:scale-[1.02] transition-all duration-200">
+            <Link to="/transfers" className="inline-block mt-3 px-4 py-1.5 rounded-md bg-emerald-500 text-gray-950 text-xs font-medium hover:bg-emerald-400 transition-colors">
               Send your first file
             </Link>
           </div>
@@ -184,14 +181,14 @@ export default function Dashboard() {
       <div>
         <div className="flex items-center justify-between mb-3">
           <p className="text-sm text-gray-400">Your Devices</p>
-          <Link to="/devices" className="text-xs text-gray-500 hover:text-gray-300 transition-colors">
+          <Link to="/devices" className="text-xs text-gray-500 hover:text-emerald-400 transition-colors">
             Manage
           </Link>
         </div>
         {approved.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {approved.slice(0, 6).map((d) => (
-              <div key={d.device_id} className="flex items-center gap-3 rounded-md border border-gray-800/40 bg-gray-900/50 px-4 py-3 hover:border-gray-700/70 hover:-translate-y-px transition-all duration-200">
+              <div key={d.device_id} className="glass-card flex items-center gap-3 px-4 py-3">
                 <DeviceIcon type={normalizeDeviceType(d.device_type)} className="w-4 h-4 text-gray-400" />
                 <span className="text-sm text-gray-300 truncate">{d.name}</span>
                 <span className="text-xs text-gray-600 ml-auto">{timeAgo(d.last_active)}</span>
@@ -199,9 +196,10 @@ export default function Dashboard() {
             ))}
           </div>
         ) : (
-          <div className="rounded-md border border-gray-800/40 bg-gray-900/30 p-6 text-center">
+          <div className="drop-zone p-10 text-center">
+            <MonitorSmartphone className="w-10 h-10 text-gray-700 mx-auto mb-3" />
             <p className="text-gray-500 text-sm">No devices registered yet</p>
-            <Link to="/devices" className="inline-block mt-2 px-4 py-1.5 rounded-md bg-gray-800/80 border border-gray-700/50 text-xs text-gray-300 hover:text-gray-100 hover:border-gray-600 hover:scale-[1.02] transition-all duration-200">
+            <Link to="/devices" className="inline-block mt-3 px-4 py-1.5 rounded-md bg-emerald-500 text-gray-950 text-xs font-medium hover:bg-emerald-400 transition-colors">
               Add your first device
             </Link>
           </div>
@@ -212,13 +210,16 @@ export default function Dashboard() {
       <div>
         <p className="text-sm text-gray-400 mb-3">Quick Actions</p>
         <div className="flex flex-wrap gap-3">
-          <Link to="/transfers" className="px-4 py-2 rounded-md bg-gray-800/80 border border-gray-700/50 text-sm text-gray-300 hover:text-gray-100 hover:border-gray-600 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200">
+          <Link to="/transfers" className="flex items-center gap-2 px-4 py-2 rounded-md bg-emerald-500 text-gray-950 text-sm font-medium hover:bg-emerald-400 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200">
+            <Send className="w-4 h-4" />
             Send a file
           </Link>
-          <Link to="/devices" className="px-4 py-2 rounded-md bg-gray-800/80 border border-gray-700/50 text-sm text-gray-300 hover:text-gray-100 hover:border-gray-600 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200">
+          <Link to="/devices" className="flex items-center gap-2 px-4 py-2 rounded-md border border-gray-700/50 bg-transparent text-sm text-gray-300 hover:text-gray-100 hover:border-emerald-500/30 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200">
+            <Plus className="w-4 h-4" />
             Add device
           </Link>
-          <Link to="/sessions" className="px-4 py-2 rounded-md bg-gray-800/80 border border-gray-700/50 text-sm text-gray-300 hover:text-gray-100 hover:border-gray-600 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200">
+          <Link to="/sessions" className="flex items-center gap-2 px-4 py-2 rounded-md border border-gray-700/50 bg-transparent text-sm text-gray-300 hover:text-gray-100 hover:border-emerald-500/30 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200">
+            <Users className="w-4 h-4" />
             Create session
           </Link>
         </div>
