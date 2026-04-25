@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Toaster } from "sonner";
 import { AuthProvider } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -15,6 +15,8 @@ import Sessions from "./pages/Sessions";
 import Transfers from "./pages/Transfers";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
+import Nodes from "./pages/Nodes";
+import Anomalies from "./pages/Anomalies";
 import NotFound from "./pages/NotFound";
 import ErrorBoundary from "./components/ErrorBoundary";
 
@@ -49,6 +51,8 @@ export default function App() {
                 <Route path="/devices" element={<Devices />} />
                 <Route path="/sessions" element={<Sessions />} />
                 <Route path="/transfers" element={<Transfers />} />
+                <Route path="/nodes" element={<Nodes />} />
+                <Route path="/anomalies" element={<Anomalies />} />
               </Route>
             </Route>
             <Route path="*" element={<NotFound />} />
