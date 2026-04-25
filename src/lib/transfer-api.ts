@@ -7,6 +7,10 @@ import type {
   CancelTransferResponse,
 } from "../types/transfer";
 
+function sliceToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+}
+
 export async function initiateTransfer(req: InitiateTransferRequest): Promise<InitiateTransferResponse> {
   const { data } = await api.post("/v1/transfers", req);
   return data;
@@ -89,6 +93,26 @@ export async function downloadChunks(
   }
 
   return chunks;
+}
+
+/**
+ * Downloads a single chunk by index.
+ */
+export async function downloadChunk(transferId: string, chunkIndex: number): Promise<Uint8Array> {
+  const { data } = await api.get(`/v1/transfers/${transferId}/chunks/${chunkIndex}`, {
+    responseType: "arraybuffer",
+  });
+  return new Uint8Array(data);
+}
+
+/**
+ * Marks a transfer as completed by the receiver.
+ */
+export async function completeTransfer(
+  transferId: string,
+  receiverNodeId: string,
+): Promise<void> {
+  await api.post(`/v1/transfers/${transferId}/complete`, { receiver_node_id: receiverNodeId });
 }
 
 /**
@@ -225,9 +249,10 @@ export async function uploadFile(
     const end = Math.min(start + CHUNK_SIZE, file.size);
     const plaintext = await file.slice(start, end).arrayBuffer();
     const ciphertext = await encryptChunk(encryptionKey, plaintext);
-    const hash = await hashChunk(ciphertext.buffer.slice(ciphertext.byteOffset, ciphertext.byteOffset + ciphertext.byteLength));
+    const ciphertextBuffer = sliceToArrayBuffer(ciphertext);
+    const hash = await hashChunk(ciphertextBuffer);
 
-    await uploadChunk(transferId, i, ciphertext.buffer.slice(ciphertext.byteOffset, ciphertext.byteOffset + ciphertext.byteLength), hash);
+    await uploadChunk(transferId, i, ciphertextBuffer, hash);
 
     if (onProgress) {
       onProgress(i + 1, totalChunks);
@@ -263,5 +288,5 @@ export async function downloadFile(
     }
   }
 
-  return new Blob(parts);
+  return new Blob(parts.map((part) => sliceToArrayBuffer(part)));
 }

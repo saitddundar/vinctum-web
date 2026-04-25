@@ -17,6 +17,10 @@ const DB_NAME = "vinctum_keys";
 const STORE = "device_keys";
 const DB_VERSION = 1;
 
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+}
+
 function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
@@ -138,6 +142,7 @@ export async function ensureDeviceKeys(deviceId: string): Promise<void> {
  */
 export async function generateEphemeralKeyPair(): Promise<{
   privateKey: CryptoKey;
+  publicKey: CryptoKey;
   publicKeyBytes: Uint8Array;
 }> {
   const keyPair = await crypto.subtle.generateKey(
@@ -148,6 +153,7 @@ export async function generateEphemeralKeyPair(): Promise<{
   const rawPub = await crypto.subtle.exportKey("raw", keyPair.publicKey);
   return {
     privateKey: keyPair.privateKey,
+    publicKey: keyPair.publicKey,
     publicKeyBytes: new Uint8Array(rawPub),
   };
 }
@@ -169,7 +175,7 @@ export async function deriveTransferKey(
   // Import remote public key
   const remotePub = await crypto.subtle.importKey(
     "raw",
-    remotePublicKeyBytes,
+    toArrayBuffer(remotePublicKeyBytes),
     { name: "X25519" } as EcKeyImportParams,
     false,
     [],
@@ -200,6 +206,70 @@ export async function deriveTransferKey(
     true,
     ["encrypt", "decrypt"],
   );
+}
+
+// ─── Chunk encryption helpers ───────────────────────────
+
+/**
+ * Derives a shared AES-256-GCM key from an ephemeral keypair and a remote
+ * device's static public key.
+ */
+export async function deriveSharedKey(
+  ephemeralKP: { privateKey: CryptoKey; publicKeyBytes: Uint8Array },
+  remoteDeviceId: string,
+  transferId: string,
+): Promise<CryptoKey> {
+  const remotePub = await getRemoteDeviceKey(remoteDeviceId);
+  return deriveTransferKey(
+    ephemeralKP.privateKey,
+    remotePub,
+    ephemeralKP.publicKeyBytes,
+    remotePub,
+    transferId,
+  );
+}
+
+/**
+ * Encrypts a chunk with AES-256-GCM. The chunk index is used as additional
+ * authenticated data to bind the ciphertext to its position.
+ * Returns iv (12 bytes) || ciphertext.
+ */
+export async function encryptChunk(
+  key: CryptoKey,
+  plaintext: Uint8Array,
+  chunkIndex: number,
+): Promise<Uint8Array> {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const aad = new TextEncoder().encode(String(chunkIndex));
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv, additionalData: aad },
+    key,
+    toArrayBuffer(plaintext),
+  );
+  const result = new Uint8Array(iv.length + ciphertext.byteLength);
+  result.set(iv, 0);
+  result.set(new Uint8Array(ciphertext), iv.length);
+  return result;
+}
+
+/**
+ * Decrypts a chunk produced by encryptChunk.
+ * Expects iv (12 bytes) || ciphertext.
+ */
+export async function decryptChunk(
+  key: CryptoKey,
+  data: Uint8Array,
+  chunkIndex: number,
+): Promise<Uint8Array> {
+  const iv = data.slice(0, 12);
+  const ciphertext = data.slice(12);
+  const aad = new TextEncoder().encode(String(chunkIndex));
+  const plaintext = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv, additionalData: aad },
+    key,
+    toArrayBuffer(ciphertext),
+  );
+  return new Uint8Array(plaintext);
 }
 
 // ─── High-level transfer key helpers ─────────────────────
