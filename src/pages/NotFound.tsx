@@ -1,17 +1,29 @@
 import { Link } from "react-router-dom";
+import { ArrowLeft } from "lucide-react";
 
 export default function NotFound() {
   return (
-    <div className="min-h-screen bg-gray-950 flex items-center justify-center px-4">
-      <div className="text-center space-y-4">
-        <p className="text-6xl font-light text-gray-300">404</p>
-        <p className="text-gray-500 text-sm">This page doesn't exist.</p>
-        <Link
-          to="/"
-          className="inline-block px-5 py-2 rounded-md bg-gray-800/80 border border-gray-700/50 text-sm text-gray-300 hover:text-gray-100 hover:border-gray-600 transition-all duration-200"
-        >
-          Go home
-        </Link>
+    <div className="min-h-screen grid-bg flex flex-col items-center justify-center" style={{ background: "var(--bg)" }}>
+      <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse at 50% 40%, oklch(0.78 0.15 160 / .06), transparent 60%)", pointerEvents: "none" }} />
+      <div style={{ position: "relative", textAlign: "center", maxWidth: 480, padding: "0 32px" }}>
+        <div className="font-mono" style={{ fontSize: 160, fontWeight: 400, letterSpacing: "-0.06em", lineHeight: 0.9, background: "linear-gradient(180deg, var(--fg) 0%, var(--muted-2) 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", marginBottom: 32 }}>
+          404
+        </div>
+        <h1 style={{ fontSize: 28, fontWeight: 500, letterSpacing: "-0.02em", margin: "0 0 14px" }}>
+          This path doesn't <span className="font-serif" style={{ color: "var(--accent)" }}>route.</span>
+        </h1>
+        <p style={{ fontSize: 14, color: "var(--fg-2)", lineHeight: 1.55, marginBottom: 28 }}>
+          The page you asked for isn't in the mesh. It may have been moved, or the link was mangled somewhere along the way.
+        </p>
+        <div className="flex gap-3 justify-center">
+          <Link to="/" className="btn btn-primary">
+            <ArrowLeft size={14} /> Back home
+          </Link>
+          <Link to="/dashboard" className="btn btn-ghost">Dashboard</Link>
+        </div>
+        <div className="font-mono" style={{ fontSize: 11, color: "var(--muted-2)", marginTop: 36, letterSpacing: ".04em" }}>
+          trace-id: req_f4a1c27_9e3d
+        </div>
       </div>
     </div>
   );
