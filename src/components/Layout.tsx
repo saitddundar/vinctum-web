@@ -2,13 +2,14 @@ import { useState } from "react";
 import { NavLink, Outlet, useNavigate, Link } from "react-router-dom";
 import {
   Activity, Monitor, Users, Send, Network, Shield,
-  Settings, LogOut, Bell, Search, X, Menu,
+  Settings, LogOut, Bell, Search, X, Menu, Download,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 
 const NAV = [
   { to: "/dashboard", label: "Overview",   Icon: Activity },
   { to: "/transfers", label: "Transfers",  Icon: Send },
+  { to: "/incoming",  label: "Receive",    Icon: Download },
   { to: "/devices",   label: "Devices",    Icon: Monitor },
   { to: "/sessions",  label: "Sessions",   Icon: Users },
   { to: "/nodes",     label: "Nodes",      Icon: Network },
