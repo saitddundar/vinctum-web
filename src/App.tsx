@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Toaster } from "sonner";
 import { AuthProvider } from "./context/AuthContext";
+import { NotificationProvider } from "./context/NotificationContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Layout from "./components/Layout";
 import Login from "./pages/Login";
@@ -13,6 +14,8 @@ import Dashboard from "./pages/Dashboard";
 import Devices from "./pages/Devices";
 import Sessions from "./pages/Sessions";
 import Transfers from "./pages/Transfers";
+import Friends from "./pages/Friends";
+import Incoming from "./pages/Incoming";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import Nodes from "./pages/Nodes";
@@ -24,6 +27,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <NotificationProvider>
         <ErrorBoundary>
           <Toaster
             theme="dark"
@@ -51,6 +55,8 @@ export default function App() {
                 <Route path="/devices" element={<Devices />} />
                 <Route path="/sessions" element={<Sessions />} />
                 <Route path="/transfers" element={<Transfers />} />
+                <Route path="/friends" element={<Friends />} />
+                <Route path="/incoming" element={<Incoming />} />
                 <Route path="/nodes" element={<Nodes />} />
                 <Route path="/anomalies" element={<Anomalies />} />
               </Route>
@@ -58,6 +64,7 @@ export default function App() {
             <Route path="*" element={<NotFound />} />
           </Routes>
         </ErrorBoundary>
+        </NotificationProvider>
       </AuthProvider>
     </BrowserRouter>
   );

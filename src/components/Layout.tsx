@@ -1,19 +1,48 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
-import { LayoutDashboard, Monitor, Users, Send, Menu, X, LogOut } from "lucide-react";
+import { LayoutDashboard, Monitor, Users, Send, Menu, X, LogOut, UserPlus, Inbox, Bell } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import { useNotifications } from "../context/NotificationContext";
+import { registerDevice } from "../lib/device-api";
+import { getDeviceFingerprint, guessDeviceType } from "../lib/fingerprint";
+import { toProtoDeviceType } from "../types/device";
+import { ensureDeviceKeys } from "../lib/device-key";
 
 const navItems = [
   { to: "/dashboard", label: "Overview", icon: LayoutDashboard },
   { to: "/devices", label: "Devices", icon: Monitor },
   { to: "/sessions", label: "Sessions", icon: Users },
   { to: "/transfers", label: "File Sharing", icon: Send },
+  { to: "/friends", label: "Friends", icon: UserPlus },
+  { to: "/incoming", label: "Incoming", icon: Inbox },
 ];
 
 export default function Layout() {
   const { user, logout } = useAuth();
+  const { counts } = useNotifications();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // On every app load: ensure this device is registered and has E2E keys uploaded.
+  // This makes the device discoverable for cross-user file transfers immediately.
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      try {
+        const fp = await getDeviceFingerprint();
+        // Register or re-register (idempotent via fingerprint check in backend)
+        const res = await registerDevice({
+          name: navigator.userAgent.includes("Mobile") ? "Mobile Browser" : "Desktop Browser",
+          device_type: toProtoDeviceType(guessDeviceType()),
+          fingerprint: fp,
+        });
+        // Upload X25519 public key for this device (idempotent)
+        await ensureDeviceKeys(res.device.device_id);
+      } catch {
+        // Silent fail — non-critical background setup
+      }
+    })();
+  }, [user?.user_id]);
 
   function handleLogout() {
     logout();
@@ -40,12 +69,22 @@ export default function Layout() {
           <Link to="/" className="text-base font-medium tracking-tight text-gray-200 hover:text-gray-100 transition-colors">
             vinctum
           </Link>
-          <button
-            onClick={() => setSidebarOpen(false)}
-            className="md:hidden text-gray-500 hover:text-gray-300 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            {counts.total > 0 && (
+              <Link to="/incoming" className="relative text-gray-400 hover:text-emerald-400 transition-colors">
+                <Bell className="w-4 h-4" />
+                <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-emerald-500 text-[10px] font-bold text-white rounded-full flex items-center justify-center">
+                  {counts.total > 9 ? "9+" : counts.total}
+                </span>
+              </Link>
+            )}
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className="md:hidden text-gray-500 hover:text-gray-300 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         <nav className="flex-1 px-3 py-4 space-y-0.5">
@@ -65,6 +104,16 @@ export default function Layout() {
             >
               <item.icon className="w-4 h-4" />
               {item.label}
+              {item.to === "/friends" && counts.friend_requests > 0 && (
+                <span className="ml-auto w-5 h-5 bg-emerald-500 text-[10px] font-bold text-white rounded-full flex items-center justify-center">
+                  {counts.friend_requests}
+                </span>
+              )}
+              {item.to === "/incoming" && counts.incoming_transfers > 0 && (
+                <span className="ml-auto w-5 h-5 bg-emerald-500 text-[10px] font-bold text-white rounded-full flex items-center justify-center">
+                  {counts.incoming_transfers}
+                </span>
+              )}
             </NavLink>
           ))}
         </nav>
