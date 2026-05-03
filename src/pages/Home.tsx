@@ -44,9 +44,9 @@ function PublicHeader({ signedIn, username }: { signedIn: boolean; username?: st
           {signedIn ? (
             <>
               <Link to="/dashboard" className="btn btn-ghost" style={{ padding: "7px 13px", fontSize: 12 }}>Dashboard</Link>
-              <div style={{ width: 28, height: 28, borderRadius: 99, background: "linear-gradient(135deg,var(--accent),var(--cyan))", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#06170f" }}>
+              <Link to="/account" style={{ width: 28, height: 28, borderRadius: 99, background: "linear-gradient(135deg,var(--accent),var(--cyan))", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#06170f", textDecoration: "none", cursor: "pointer" }}>
                 {username?.slice(0, 2).toUpperCase()}
-              </div>
+              </Link>
             </>
           ) : (
             <>
