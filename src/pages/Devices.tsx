@@ -1,519 +1,274 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Monitor, Smartphone, Tablet, MonitorSmartphone, Copy, Check } from "lucide-react";
+import { Monitor, Smartphone, Tablet, QrCode, MonitorSmartphone } from "lucide-react";
 import type { Device } from "../types/device";
 import { normalizeDeviceType, toProtoDeviceType } from "../types/device";
-import {
-  listDevices,
-  registerDevice,
-  revokeDevice,
-  generatePairingCode,
-  redeemPairingCode,
-  approvePairing,
-} from "../lib/device-api";
+import { listDevices, registerDevice, revokeDevice, generatePairingCode, redeemPairingCode, approvePairing } from "../lib/device-api";
 import { getDeviceFingerprint, guessDeviceType } from "../lib/fingerprint";
 import { ensureDeviceKeys } from "../lib/device-key";
 
-const typeLabel: Record<string, string> = {
-  pc: "Computer",
-  phone: "Phone",
-  tablet: "Tablet",
-};
-
-function DeviceIcon({ type, className = "w-4 h-4" }: { type: string; className?: string }) {
-  switch (type) {
-    case "phone": return <Smartphone className={className} />;
-    case "tablet": return <Tablet className={className} />;
-    default: return <Monitor className={className} />;
-  }
-}
-
 function timeAgo(iso: string) {
   if (!iso) return "never";
-  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
+  const m = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (m < 1) return "just now"; if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60); if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
 }
 
-function formatDate(iso: string) {
-  if (!iso) return "-";
-  return new Date(iso).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+function DeviceIcon({ type, size = 14 }: { type: string; size?: number }) {
+  const t = normalizeDeviceType(type as any);
+  const s = { color: "var(--fg-2)" };
+  if (t === "phone")  return <Smartphone size={size} style={s} />;
+  if (t === "tablet") return <Tablet     size={size} style={s} />;
+  return <Monitor size={size} style={s} />;
 }
 
-type ModalMode = null | "add-this" | "pairing-generate" | "pairing-redeem";
+type Modal = null | "add-this" | "pairing-generate" | "pairing-redeem";
 
 export default function Devices() {
-  const [devices, setDevices] = useState<Device[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [modal, setModal] = useState<ModalMode>(null);
-  const [selected, setSelected] = useState<Device | null>(null);
+  const [devices,     setDevices]     = useState<Device[]>([]);
+  const [loading,     setLoading]     = useState(true);
+  const [modal,       setModal]       = useState<Modal>(null);
+  const [selected,    setSelected]    = useState<Device | null>(null);
   const [pairingCode, setPairingCode] = useState("");
-  const [pairingExpiry, setPairingExpiry] = useState(0);
-  const [addName, setAddName] = useState("");
-  const [redeemCode, setRedeemCode] = useState("");
-  const [redeemName, setRedeemName] = useState("");
+  const [pairingExp,  setPairingExp]  = useState(0);
+  const [addName,     setAddName]     = useState("");
+  const [redeemCode,  setRedeemCode]  = useState("");
+  const [redeemName,  setRedeemName]  = useState("");
   const [actionLoading, setActionLoading] = useState(false);
-  const [fpPreview, setFpPreview] = useState("");
 
-  useEffect(() => {
-    getDeviceFingerprint().then((fp) => setFpPreview(fp));
-  }, []);
+  const pending  = devices.filter(d => !d.is_approved && !d.is_revoked);
+  const active   = devices.filter(d =>  d.is_approved && !d.is_revoked);
+  const revoked  = devices.filter(d =>  d.is_revoked);
 
-  const pendingDevices = devices.filter((d) => !d.is_approved && !d.is_revoked);
-  const activeDevices = devices.filter((d) => d.is_approved && !d.is_revoked);
-  const revokedDevices = devices.filter((d) => d.is_revoked);
-
-  async function fetchDevices() {
-    try {
-      const res = await listDevices();
-      setDevices(res.devices);
-    } catch (err) {
-      console.error("Failed to fetch devices:", err);
-    } finally {
-      setLoading(false);
-    }
+  async function fetch() {
+    try { const r = await listDevices(); setDevices(r.devices); }
+    catch (e) { console.error(e); }
+    finally { setLoading(false); }
   }
 
-  useEffect(() => {
-    fetchDevices();
-  }, []);
+  useEffect(() => { fetch(); }, []);
 
   useEffect(() => {
-    if (pairingExpiry <= 0) return;
-    const t = setInterval(() => {
-      setPairingExpiry((p) => {
-        if (p <= 1) {
-          clearInterval(t);
-          return 0;
-        }
-        return p - 1;
-      });
-    }, 1000);
+    if (pairingExp <= 0) return;
+    const t = setInterval(() => setPairingExp(p => { if (p <= 1) { clearInterval(t); return 0; } return p - 1; }), 1000);
     return () => clearInterval(t);
-  }, [pairingExpiry > 0]);
+  }, [pairingExp > 0]);
 
-  async function handleAddThisDevice() {
+  async function handleAddThis() {
     if (!addName) return;
     setActionLoading(true);
     try {
       const fp = await getDeviceFingerprint();
-      const res = await registerDevice({
-        name: addName,
-        device_type: toProtoDeviceType(guessDeviceType()),
-        fingerprint: fp,
-      });
-      try { await ensureDeviceKeys(res.device.device_id); } catch {}
-      await fetchDevices();
-      setModal(null);
-      setAddName("");
+      const r = await registerDevice({ name: addName, device_type: toProtoDeviceType(guessDeviceType()), fingerprint: fp });
+      try { await ensureDeviceKeys(r.device.device_id); } catch {}
+      await fetch(); setModal(null); setAddName("");
       toast.success("Device registered");
-    } catch (err) {
-      console.error("Failed to add device:", err);
-      toast.error("Failed to add device");
-    } finally {
-      setActionLoading(false);
-    }
+    } catch { toast.error("Failed to add device"); }
+    finally { setActionLoading(false); }
   }
 
-  async function handleGeneratePairingCode() {
-    const myDevice = devices.find((d) => d.is_approved);
-    if (!myDevice) return;
+  async function handleGeneratePairing() {
+    const me = devices.find(d => d.is_approved);
+    if (!me) return;
     setActionLoading(true);
     try {
-      const res = await generatePairingCode(myDevice.device_id);
-      setPairingCode(res.pairing_code);
-      setPairingExpiry(res.expires_in_s);
-      setModal("pairing-generate");
-    } catch (err) {
-      console.error("Failed to generate pairing code:", err);
-      toast.error("Failed to generate pairing code");
-    } finally {
-      setActionLoading(false);
-    }
+      const r = await generatePairingCode(me.device_id);
+      setPairingCode(r.pairing_code); setPairingExp(r.expires_in_s); setModal("pairing-generate");
+    } catch { toast.error("Failed to generate pairing code"); }
+    finally { setActionLoading(false); }
   }
 
-  async function handleRedeemCode() {
+  async function handleRedeem() {
     if (!redeemCode || !redeemName) return;
     setActionLoading(true);
     try {
       const fp = await getDeviceFingerprint();
-      await redeemPairingCode({
-        pairing_code: redeemCode,
-        name: redeemName,
-        device_type: toProtoDeviceType(guessDeviceType()),
-        fingerprint: fp,
-      });
-      await fetchDevices();
-      setModal(null);
-      setRedeemCode("");
-      setRedeemName("");
+      await redeemPairingCode({ pairing_code: redeemCode, name: redeemName, device_type: toProtoDeviceType(guessDeviceType()), fingerprint: fp });
+      await fetch(); setModal(null); setRedeemCode(""); setRedeemName("");
       toast.success("Pairing code redeemed");
-    } catch (err) {
-      console.error("Failed to redeem code:", err);
-      toast.error("Failed to redeem pairing code");
-    } finally {
-      setActionLoading(false);
-    }
+    } catch { toast.error("Failed to redeem pairing code"); }
+    finally { setActionLoading(false); }
   }
 
-  async function handleApprove(pendingId: string, approve: boolean) {
-    const myDevice = devices.find((d) => d.is_approved);
-    if (!myDevice) return;
-    try {
-      await approvePairing({
-        approver_device_id: myDevice.device_id,
-        pending_device_id: pendingId,
-        approve,
-      });
-      await fetchDevices();
-    } catch (err) {
-      console.error("Failed to approve/reject device:", err);
-    }
+  async function handleApprove(id: string, approve: boolean) {
+    const me = devices.find(d => d.is_approved);
+    if (!me) return;
+    try { await approvePairing({ approver_device_id: me.device_id, pending_device_id: id, approve }); await fetch(); }
+    catch { console.error("approve failed"); }
   }
 
-  async function handleRevoke(deviceId: string) {
-    if (!confirm("Revoke this device? It will lose access to your account.")) return;
-    try {
-      await revokeDevice(deviceId);
-      if (selected?.device_id === deviceId) setSelected(null);
-      await fetchDevices();
-    } catch (err) {
-      console.error("Failed to revoke device:", err);
-    }
+  async function handleRevoke(id: string) {
+    if (!confirm("Revoke this device?")) return;
+    try { await revokeDevice(id); if (selected?.device_id === id) setSelected(null); await fetch(); }
+    catch { console.error("revoke failed"); }
   }
 
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <h1 className="text-xl font-medium text-gray-100">Devices</h1>
-        <div className="space-y-2">
-          {[...Array(3)].map((_, i) => (
-            <div key={i} className="h-16 glass-card-static animate-pulse" />
-          ))}
-        </div>
-      </div>
-    );
-  }
+  if (loading) return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <h1 style={{ fontSize: 22, fontWeight: 500, letterSpacing: "-0.02em", margin: 0 }}>Devices</h1>
+      {[1,2,3].map(i => <div key={i} className="glass-card-static animate-pulse" style={{ height: 64 }} />)}
+    </div>
+  );
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+      {/* Header */}
+      <div className="flex items-start justify-between gap-6">
         <div>
-          <h1 className="text-xl font-medium text-gray-100">Devices</h1>
-          <p className="text-xs text-gray-500 mt-1">Device inventory and pairing workflows</p>
+          <h1 style={{ fontSize: 22, fontWeight: 500, letterSpacing: "-0.02em", margin: 0 }}>
+            Devices in your <span className="font-serif" style={{ color: "var(--accent)" }}>mesh</span>
+          </h1>
+          <p style={{ fontSize: 13, color: "var(--fg-2)", marginTop: 6, marginBottom: 0 }}>
+            {active.length} approved · {pending.length} pending · {revoked.length} revoked
+          </p>
         </div>
         <div className="flex gap-2">
-          <button
-            onClick={() => setModal("add-this")}
-            className="px-3 py-1.5 rounded-md bg-emerald-500 text-gray-950 text-sm font-medium hover:bg-emerald-400 transition-colors"
-          >
-            Register This Device
-          </button>
-          <button
-            onClick={handleGeneratePairingCode}
-            className="px-3 py-1.5 rounded-md border border-gray-700/50 bg-transparent text-sm text-gray-300 hover:text-gray-100 hover:border-emerald-500/30 transition-colors"
-          >
-            Pairing Code
-          </button>
-          <button
-            onClick={() => setModal("pairing-redeem")}
-            className="px-3 py-1.5 rounded-md border border-gray-700/50 bg-transparent text-sm text-gray-300 hover:text-gray-100 hover:border-emerald-500/30 transition-colors"
-          >
-            Join With Code
-          </button>
+          <button onClick={() => setModal("add-this")} className="btn btn-ghost" style={{ fontSize: 12 }}>Register this device</button>
+          <button onClick={handleGeneratePairing} className="btn btn-ghost" style={{ fontSize: 12 }}><QrCode size={12} /> Pairing code</button>
+          <button onClick={() => setModal("pairing-redeem")} className="btn btn-primary" style={{ fontSize: 12 }}>Join with code</button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <MetricCard label="Approved" value={activeDevices.length} hint="Trusted devices" />
-        <MetricCard label="Pending" value={pendingDevices.length} hint="Waiting for approval" />
-        <MetricCard label="Revoked" value={revokedDevices.length} hint="Access removed" />
-      </div>
-
-      <div className="glass-card-static p-4">
-        <p className="text-xs uppercase tracking-wider text-gray-500 mb-3">Pairing Process</p>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <ProcessStep title="1. Generate" description="Create one-time pairing code on an approved device." />
-          <ProcessStep title="2. Redeem" description="Enter code from the new device and submit fingerprint." />
-          <ProcessStep title="3. Approve" description="Review pending request and confirm trusted access." />
+      {/* Pairing flow info */}
+      <div className="glass-card-static" style={{ padding: "16px 20px" }}>
+        <div style={{ fontSize: 10, color: "var(--muted-2)", textTransform: "uppercase", letterSpacing: ".09em", fontWeight: 600, marginBottom: 12 }}>Pairing flow</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+          {[
+            ["1. Generate", "Create a one-time pairing code on an approved device."],
+            ["2. Redeem",   "Enter the code from the new device and submit fingerprint."],
+            ["3. Approve",  "Review the pending request and confirm trusted access."],
+          ].map(([t, d]) => (
+            <div key={t} style={{ padding: "12px 14px", borderRadius: 9, background: "oklch(0.78 0.15 160 / .04)", border: "1px solid oklch(0.78 0.15 160 / .15)" }}>
+              <div style={{ fontSize: 13, color: "var(--fg)", fontWeight: 500, marginBottom: 5 }}>{t}</div>
+              <div style={{ fontSize: 12, color: "var(--fg-2)", lineHeight: 1.5 }}>{d}</div>
+            </div>
+          ))}
         </div>
       </div>
 
       {/* Pending approvals */}
-      {pendingDevices.length > 0 && (
-        <div className="rounded-xl border border-yellow-900/40 bg-yellow-950/20 p-4 space-y-3">
-          <p className="text-xs text-yellow-500 uppercase tracking-wider">Pending Approval</p>
-          {pendingDevices.map((d) => (
-            <div key={d.device_id} className="flex items-center justify-between rounded-lg border border-yellow-900/20 bg-yellow-950/10 px-3 py-2">
-              <div className="flex items-center gap-3">
-                <span className="text-sm text-gray-300">{d.name}</span>
-                <span className="text-xs text-gray-600">{typeLabel[normalizeDeviceType(d.device_type)]}</span>
+      {pending.length > 0 && (
+        <div style={{ border: "1px solid oklch(0.84 0.13 85 / .25)", borderRadius: 12, background: "oklch(0.84 0.13 85 / .03)", overflow: "hidden" }}>
+          <div style={{ padding: "12px 20px", borderBottom: "1px solid oklch(0.84 0.13 85 / .15)" }}>
+            <span style={{ fontSize: 11, color: "var(--amber)", textTransform: "uppercase", letterSpacing: ".09em", fontWeight: 600 }}>Pending approval</span>
+          </div>
+          {pending.map((d, i, arr) => (
+            <div key={d.device_id} className="flex items-center gap-4" style={{ padding: "14px 20px", borderBottom: i < arr.length - 1 ? "1px solid oklch(0.84 0.13 85 / .1)" : "none" }}>
+              <DeviceIcon type={d.device_type} size={15} />
+              <div style={{ flex: 1 }}>
+                <span style={{ fontSize: 13, color: "var(--fg)", fontWeight: 500 }}>{d.name}</span>
+                <span className="font-mono" style={{ fontSize: 11, color: "var(--muted)", marginLeft: 10 }}>{d.fingerprint?.slice(0, 16) ?? "—"}…</span>
               </div>
               <div className="flex gap-2">
-                <button
-                  onClick={() => handleApprove(d.device_id, true)}
-                  className="px-3 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 text-xs text-emerald-400 transition-colors"
-                >
-                  Approve
-                </button>
-                <button
-                  onClick={() => handleApprove(d.device_id, false)}
-                  className="px-3 py-1 rounded-md text-xs text-gray-500 hover:text-red-400 transition-colors"
-                >
-                  Reject
-                </button>
+                <button onClick={() => handleApprove(d.device_id, false)} className="btn btn-ghost" style={{ padding: "5px 11px", fontSize: 11.5 }}>Reject</button>
+                <button onClick={() => handleApprove(d.device_id, true)}  className="btn btn-primary" style={{ padding: "5px 11px", fontSize: 11.5 }}>Approve</button>
               </div>
             </div>
           ))}
         </div>
       )}
 
-      <div className="flex gap-6">
-        {/* Device list */}
-        <div className="flex-1 space-y-2">
-          {activeDevices.length === 0 ? (
-            <div className="drop-zone p-10 text-center">
-              <MonitorSmartphone className="w-10 h-10 text-gray-700 mx-auto mb-3" />
-              <p className="text-gray-400">No devices registered</p>
-              <p className="text-xs text-gray-600 mt-1 mb-3">Add this device or pair a remote one to get started</p>
-              <button
-                onClick={() => setModal("add-this")}
-                className="px-4 py-1.5 rounded-md bg-emerald-500 text-gray-950 text-xs font-medium hover:bg-emerald-400 transition-colors"
-              >
-                Register this device
-              </button>
+      {/* Device list */}
+      <div style={{ display: "flex", gap: 20 }}>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
+          {active.length === 0 ? (
+            <div className="drop-zone" style={{ padding: 40, textAlign: "center" }}>
+              <MonitorSmartphone size={32} style={{ color: "var(--muted-2)", margin: "0 auto 12px" }} />
+              <p style={{ fontSize: 13, color: "var(--muted)", marginBottom: 14 }}>No devices registered</p>
+              <button onClick={() => setModal("add-this")} className="btn btn-primary" style={{ fontSize: 12 }}>Register this device</button>
             </div>
-          ) : (
-            activeDevices.map((d) => (
-              <button
-                key={d.device_id}
-                onClick={() => setSelected(selected?.device_id === d.device_id ? null : d)}
-                className={`w-full text-left rounded-xl transition-all duration-200 hover:scale-[1.005] ${
-                  selected?.device_id === d.device_id
-                    ? "glass-card border-emerald-500/30"
-                    : "glass-card"
-                } px-4 py-3`}
-                style={selected?.device_id === d.device_id ? { borderColor: "rgba(52, 211, 153, 0.3)" } : {}}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <DeviceIcon type={normalizeDeviceType(d.device_type)} className="w-4 h-4 text-gray-400" />
-                    <span className="text-sm text-gray-200">{d.name}</span>
-                    <span className="text-xs text-gray-600">{typeLabel[normalizeDeviceType(d.device_type)]}</span>
-                  </div>
-                  <span className="text-xs text-gray-600">{timeAgo(d.last_active)}</span>
-                </div>
-                {d.node_id && (
-                  <div className="flex items-center gap-2 mt-1">
-                    <p className="text-xs text-gray-600 font-mono truncate flex-1">{d.node_id}</p>
-                    <CopyButton text={d.node_id} />
-                  </div>
-                )}
-              </button>
-            ))
-          )}
+          ) : active.map(d => (
+            <button key={d.device_id} onClick={() => setSelected(selected?.device_id === d.device_id ? null : d)}
+              style={{ width: "100%", textAlign: "left", padding: "14px 18px", borderRadius: 11, border: `1px solid ${selected?.device_id === d.device_id ? "oklch(0.78 0.15 160 / .35)" : "var(--line)"}`, background: selected?.device_id === d.device_id ? "oklch(0.78 0.15 160 / .04)" : "oklch(1 0 0 / .015)", cursor: "pointer", display: "flex", alignItems: "center", gap: 14, transition: "border-color .15s" }}>
+              <div style={{ width: 36, height: 36, borderRadius: 9, background: "oklch(1 0 0 / .02)", border: "1px solid var(--line)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, position: "relative" }}>
+                <DeviceIcon type={d.device_type} size={15} />
+                <span style={{ position: "absolute", bottom: -2, right: -2, width: 8, height: 8, borderRadius: 99, background: "var(--accent)", border: "2px solid var(--bg)" }} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13.5, color: "var(--fg)", fontWeight: 500 }}>{d.name}</div>
+                {d.node_id && <div className="font-mono" style={{ fontSize: 10.5, color: "var(--muted-2)", marginTop: 2 }}>{d.node_id}</div>}
+              </div>
+              <span style={{ fontSize: 11.5, color: "var(--muted-2)" }}>{timeAgo(d.last_active)}</span>
+            </button>
+          ))}
         </div>
 
         {/* Detail panel */}
         {selected && (
-          <div className="w-72 shrink-0 glass-card-static p-5 space-y-5 self-start">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium text-gray-200">{selected.name}</p>
-              <button onClick={() => setSelected(null)} className="text-xs text-gray-600 hover:text-gray-400">
-                Close
-              </button>
+          <div className="glass-card-static" style={{ width: 280, padding: 20, alignSelf: "flex-start", flexShrink: 0 }}>
+            <div className="flex justify-between items-center" style={{ marginBottom: 16 }}>
+              <span style={{ fontSize: 14, fontWeight: 500, color: "var(--fg)" }}>{selected.name}</span>
+              <button onClick={() => setSelected(null)} style={{ fontSize: 11, color: "var(--muted-2)", background: "none", border: "none", cursor: "pointer" }}>Close</button>
             </div>
-
-            <div className="space-y-3">
-              <DetailRow label="Type" value={typeLabel[normalizeDeviceType(selected.device_type)]} />
-              <DetailRow label="Status" value={selected.is_approved ? "Approved" : "Pending"} />
-              <DetailRow label="Added" value={formatDate(selected.created_at)} />
-              <DetailRow label="Last Active" value={timeAgo(selected.last_active)} />
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {[
+                ["Type",        normalizeDeviceType(selected.device_type as any)],
+                ["Status",      selected.is_approved ? "Approved" : "Pending"],
+                ["Last active", timeAgo(selected.last_active)],
+              ].map(([l, v]) => (
+                <div key={l} className="flex justify-between text-xs">
+                  <span style={{ fontSize: 12, color: "var(--muted)" }}>{l}</span>
+                  <span style={{ fontSize: 12, color: "var(--fg)" }}>{v}</span>
+                </div>
+              ))}
               {selected.node_id && (
                 <div>
-                  <p className="text-xs text-gray-500 mb-1">Node ID <span className="text-gray-700 ml-1">— share this to receive files</span></p>
-                  <div className="flex items-start gap-2">
-                    <p className="text-xs text-gray-400 font-mono break-all flex-1">{selected.node_id}</p>
-                    <CopyButton text={selected.node_id} />
-                  </div>
+                  <div style={{ fontSize: 11, color: "var(--muted-2)", marginBottom: 4 }}>Node ID</div>
+                  <div className="font-mono" style={{ fontSize: 10.5, color: "var(--fg-2)", wordBreak: "break-all" }}>{selected.node_id}</div>
                 </div>
               )}
               {selected.fingerprint && (
                 <div>
-                  <p className="text-xs text-gray-500 mb-1">Fingerprint</p>
-                  <p className="text-xs text-gray-400 font-mono break-all">{selected.fingerprint.slice(0, 24)}...</p>
+                  <div style={{ fontSize: 11, color: "var(--muted-2)", marginBottom: 4 }}>Fingerprint</div>
+                  <div className="font-mono" style={{ fontSize: 10.5, color: "var(--fg-2)" }}>{selected.fingerprint.slice(0, 24)}…</div>
                 </div>
               )}
-              {selected.approved_by_device_id && (
-                <DetailRow label="Approved By" value={selected.approved_by_device_id.slice(0, 8) + "..."} />
-              )}
             </div>
-
-            <button
-              onClick={() => handleRevoke(selected.device_id)}
-              className="w-full px-3 py-1.5 rounded-md text-xs text-red-400 border border-red-900/30 hover:border-red-400/30 hover:bg-red-400/5 transition-colors"
-            >
-              Revoke Device
-            </button>
+            <button onClick={() => handleRevoke(selected.device_id)} className="btn btn-danger" style={{ width: "100%", justifyContent: "center", marginTop: 16, fontSize: 12 }}>Revoke device</button>
           </div>
         )}
       </div>
 
       {/* Modals */}
       {modal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => setModal(null)}>
-          <div className="glass-card-static p-6 w-full max-w-sm space-y-4 shadow-[0_20px_40px_rgba(0,0,0,0.45)]" onClick={(e) => e.stopPropagation()}>
-            {modal === "add-this" && (
-              <>
-                <div>
-                  <h2 className="text-base font-medium text-gray-100">Add This Device</h2>
-                  <p className="text-xs text-gray-500 mt-1">Register the current browser as a device</p>
+        <div onClick={() => setModal(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.6)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50 }}>
+          <div onClick={e => e.stopPropagation()} className="glass-card-static" style={{ width: "100%", maxWidth: 400, padding: 28, boxShadow: "0 24px 48px rgba(0,0,0,.5)" }}>
+            {modal === "add-this" && <>
+              <div style={{ marginBottom: 18 }}>
+                <h2 style={{ fontSize: 16, fontWeight: 500, margin: 0 }}>Register this device</h2>
+                <p style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 5 }}>Register the current browser as a device.</p>
+              </div>
+              <input type="text" placeholder="Device name" value={addName} onChange={e => setAddName(e.target.value)} className="vt-input" autoFocus style={{ marginBottom: 18 }} />
+              <div className="flex gap-2 justify-end">
+                <button onClick={() => setModal(null)} className="btn btn-ghost" style={{ fontSize: 12.5 }}>Cancel</button>
+                <button onClick={handleAddThis} disabled={!addName || actionLoading} className="btn btn-primary" style={{ fontSize: 12.5 }}>{actionLoading ? "Adding…" : "Add"}</button>
+              </div>
+            </>}
+            {modal === "pairing-generate" && <>
+              <h2 style={{ fontSize: 16, fontWeight: 500, margin: "0 0 6px" }}>Pairing code</h2>
+              <p style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 24 }}>Enter this on the device you want to pair.</p>
+              <div style={{ textAlign: "center", padding: "20px 0" }}>
+                <div className="font-mono" style={{ fontSize: 36, fontWeight: 500, letterSpacing: ".35em", color: "var(--accent)" }}>{pairingCode}</div>
+                <div style={{ fontSize: 12, color: pairingExp > 0 ? "var(--muted)" : "var(--red)", marginTop: 10 }}>
+                  {pairingExp > 0 ? `Expires in ${Math.floor(pairingExp / 60)}:${String(pairingExp % 60).padStart(2, "0")}` : "Code expired"}
                 </div>
-                <input
-                  type="text"
-                  placeholder="Device name"
-                  value={addName}
-                  onChange={(e) => setAddName(e.target.value)}
-                  autoFocus
-                  className="w-full bg-gray-800/80 border border-gray-700/50 rounded-md px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/30"
-                />
-                <div className="text-xs text-gray-600 space-y-1">
-                  <p>Type: {typeLabel[guessDeviceType()]}</p>
-                  <p>Fingerprint: {fpPreview.slice(0, 16)}...</p>
-                </div>
-                <div className="flex gap-2 justify-end">
-                  <button onClick={() => setModal(null)} className="px-3 py-1.5 rounded-md text-sm text-gray-500 hover:text-gray-300 transition-colors">
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleAddThisDevice}
-                    disabled={!addName || actionLoading}
-                    className="px-4 py-1.5 rounded-md bg-emerald-500 text-gray-950 text-sm font-medium hover:bg-emerald-400 disabled:opacity-40 transition-colors"
-                  >
-                    {actionLoading ? "Adding..." : "Add"}
-                  </button>
-                </div>
-              </>
-            )}
-
-            {modal === "pairing-generate" && (
-              <>
-                <div>
-                  <h2 className="text-base font-medium text-gray-100">Pairing Code</h2>
-                  <p className="text-xs text-gray-500 mt-1">Enter this code on the device you want to pair</p>
-                </div>
-                <div className="text-center py-6">
-                  <p className="text-3xl font-mono font-medium tracking-[0.4em] text-emerald-400">{pairingCode}</p>
-                </div>
-                <div className="text-center">
-                  {pairingExpiry > 0 ? (
-                    <p className="text-xs text-gray-500">
-                      Expires in {Math.floor(pairingExpiry / 60)}:{String(pairingExpiry % 60).padStart(2, "0")}
-                    </p>
-                  ) : (
-                    <p className="text-xs text-red-400/80">Code expired</p>
-                  )}
-                </div>
-                <button onClick={() => setModal(null)} className="w-full px-3 py-1.5 rounded-md border border-gray-700/50 bg-transparent text-sm text-gray-300 hover:text-gray-100 hover:border-emerald-500/30 transition-colors">
-                  Close
-                </button>
-              </>
-            )}
-
-            {modal === "pairing-redeem" && (
-              <>
-                <div>
-                  <h2 className="text-base font-medium text-gray-100">Enter Pairing Code</h2>
-                  <p className="text-xs text-gray-500 mt-1">Enter the 6-character code from your other device</p>
-                </div>
-                <input
-                  type="text"
-                  placeholder="XXXXXX"
-                  value={redeemCode}
-                  onChange={(e) => setRedeemCode(e.target.value.toUpperCase().slice(0, 6))}
-                  autoFocus
-                  className="w-full bg-gray-800/80 border border-gray-700/50 rounded-md px-3 py-2 text-sm text-center font-mono text-lg tracking-[0.3em] text-gray-200 placeholder-gray-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/30"
-                  maxLength={6}
-                />
-                <input
-                  type="text"
-                  placeholder="Device name"
-                  value={redeemName}
-                  onChange={(e) => setRedeemName(e.target.value)}
-                  className="w-full bg-gray-800/80 border border-gray-700/50 rounded-md px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/30"
-                />
-                <div className="flex gap-2 justify-end">
-                  <button onClick={() => setModal(null)} className="px-3 py-1.5 rounded-md text-sm text-gray-500 hover:text-gray-300 transition-colors">
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleRedeemCode}
-                    disabled={redeemCode.length !== 6 || !redeemName || actionLoading}
-                    className="px-4 py-1.5 rounded-md bg-emerald-500 text-gray-950 text-sm font-medium hover:bg-emerald-400 disabled:opacity-40 transition-colors"
-                  >
-                    {actionLoading ? "Submitting..." : "Submit"}
-                  </button>
-                </div>
-              </>
-            )}
+              </div>
+              <button onClick={() => setModal(null)} className="btn btn-ghost" style={{ width: "100%", justifyContent: "center" }}>Close</button>
+            </>}
+            {modal === "pairing-redeem" && <>
+              <h2 style={{ fontSize: 16, fontWeight: 500, margin: "0 0 6px" }}>Join with code</h2>
+              <p style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 18 }}>Enter the 6-character code from your other device.</p>
+              <input type="text" placeholder="XXXXXX" value={redeemCode} onChange={e => setRedeemCode(e.target.value.toUpperCase().slice(0, 6))} maxLength={6} className="vt-input font-mono" style={{ textAlign: "center", fontSize: 20, letterSpacing: ".25em", marginBottom: 12 }} autoFocus />
+              <input type="text" placeholder="Device name" value={redeemName} onChange={e => setRedeemName(e.target.value)} className="vt-input" style={{ marginBottom: 18 }} />
+              <div className="flex gap-2 justify-end">
+                <button onClick={() => setModal(null)} className="btn btn-ghost" style={{ fontSize: 12.5 }}>Cancel</button>
+                <button onClick={handleRedeem} disabled={redeemCode.length !== 6 || !redeemName || actionLoading} className="btn btn-primary" style={{ fontSize: 12.5 }}>{actionLoading ? "Submitting…" : "Submit"}</button>
+              </div>
+            </>}
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  function handleCopy(e: React.MouseEvent) {
-    e.stopPropagation();
-    navigator.clipboard.writeText(text).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    });
-  }
-  return (
-    <button
-      onClick={handleCopy}
-      title="Copy to clipboard"
-      className="shrink-0 p-0.5 rounded text-gray-600 hover:text-emerald-400 transition-colors"
-    >
-      {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-    </button>
-  );
-}
-
-function DetailRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between text-xs">
-      <span className="text-gray-500">{label}</span>
-      <span className="text-gray-300">{value}</span>
-    </div>
-  );
-}
-
-function MetricCard({ label, value, hint }: { label: string; value: number; hint: string }) {
-  return (
-    <div className="glass-card-static px-4 py-3">
-      <p className="text-4xl font-bold text-gray-50">{value}</p>
-      <p className="text-xs uppercase tracking-wider text-gray-500 mt-1">{label}</p>
-      <p className="text-xs text-gray-600 mt-1">{hint}</p>
-    </div>
-  );
-}
-
-function ProcessStep({ title, description }: { title: string; description: string }) {
-  return (
-    <div className="rounded-lg border border-emerald-500/10 bg-emerald-500/5 p-3">
-      <p className="text-sm text-gray-200">{title}</p>
-      <p className="text-xs text-gray-600 mt-1 leading-relaxed">{description}</p>
     </div>
   );
 }

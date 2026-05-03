@@ -7,308 +7,170 @@ import { changePassword } from "../lib/auth-api";
 export default function Account() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const [displayName, setDisplayName] = useState(user?.username || "");
-  const [saving, setSaving] = useState(false);
-  const [notifications, setNotifications] = useState({
-    transfers: true,
-    devices: true,
-    sessions: false,
-  });
+  const [displayName,      setDisplayName]      = useState(user?.username || "");
+  const [saving,           setSaving]           = useState(false);
+  const [showPwForm,       setShowPwForm]       = useState(false);
+  const [currentPw,        setCurrentPw]        = useState("");
+  const [newPw,            setNewPw]            = useState("");
+  const [confirmPw,        setConfirmPw]        = useState("");
+  const [pwLoading,        setPwLoading]        = useState(false);
+  const [pwError,          setPwError]          = useState("");
+  const [notifications,    setNotifications]    = useState({ transfers: true, devices: true, sessions: false });
 
-  // Password change
-  const [showPasswordForm, setShowPasswordForm] = useState(false);
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [passwordLoading, setPasswordLoading] = useState(false);
-  const [passwordError, setPasswordError] = useState("");
-
-  function handleLogout() {
-    logout();
-    toast.success("Signed out");
-    navigate("/");
-  }
+  function handleLogout() { logout(); toast.success("Signed out"); navigate("/"); }
 
   function handleSaveName() {
     if (!displayName.trim() || displayName === user?.username) return;
     setSaving(true);
-    // Will hit API when backend supports display name updates
-    setTimeout(() => {
-      setSaving(false);
-      toast.success("Display name updated");
-    }, 500);
-  }
-
-  function handleRevokeAll() {
-    if (!confirm("Sign out of all devices? You'll need to sign in again everywhere.")) return;
-    // Will hit revoke-all-tokens endpoint when backend supports it
-    toast.success("All sessions revoked");
-    logout();
-    navigate("/login");
+    setTimeout(() => { setSaving(false); toast.success("Display name updated"); }, 500);
   }
 
   async function handleChangePassword(e: FormEvent) {
-    e.preventDefault();
-    setPasswordError("");
-
-    if (newPassword.length < 8) {
-      setPasswordError("Password must be at least 8 characters.");
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      setPasswordError("Passwords do not match.");
-      return;
-    }
-
-    setPasswordLoading(true);
+    e.preventDefault(); setPwError("");
+    if (newPw.length < 8) { setPwError("Password must be at least 8 characters."); return; }
+    if (newPw !== confirmPw) { setPwError("Passwords do not match."); return; }
+    setPwLoading(true);
     try {
-      await changePassword(currentPassword, newPassword);
-      toast.success("Password updated");
-      setShowPasswordForm(false);
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmPassword("");
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || "Failed to change password";
-      setPasswordError(msg);
-    } finally {
-      setPasswordLoading(false);
-    }
+      await changePassword(currentPw, newPw);
+      toast.success("Password updated"); setShowPwForm(false);
+      setCurrentPw(""); setNewPw(""); setConfirmPw("");
+    } catch (err: any) { setPwError(err?.response?.data?.error || "Failed to change password"); }
+    finally { setPwLoading(false); }
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100">
-      {/* Header */}
-      <header className="border-b border-gray-800/40">
-        <div className="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between">
-          <Link to="/" className="text-base font-medium tracking-tight text-gray-200 hover:text-gray-100 transition-colors">
-            vinctum
+    <div className="min-h-screen" style={{ background: "var(--bg)" }}>
+      <header style={{ borderBottom: "1px solid var(--line)", background: "oklch(0.152 0.012 235 / .7)", backdropFilter: "blur(10px)", position: "sticky", top: 0, zIndex: 10 }}>
+        <div style={{ maxWidth: 920, margin: "0 auto", padding: "0 32px", height: 58, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <Link to="/" className="flex items-center gap-2" style={{ textDecoration: "none" }}>
+            <span className="logo-mark" />
+            <span style={{ fontSize: 15, fontWeight: 600, letterSpacing: "-0.02em", color: "var(--fg)" }}>vinctum</span>
           </Link>
           <div className="flex items-center gap-3">
-            <Link to="/dashboard" className="px-4 py-1.5 rounded-md text-sm text-gray-500 hover:text-gray-300 transition-colors">
-              Dashboard
-            </Link>
-            <span className="px-4 py-1.5 rounded-md bg-gray-800/80 border border-gray-700/50 text-sm text-gray-100">
-              Account
-            </span>
+            <Link to="/dashboard" className="btn btn-ghost" style={{ padding: "6px 12px", fontSize: 12.5 }}>Dashboard</Link>
+            <span style={{ padding: "6px 12px", borderRadius: 9, background: "oklch(1 0 0 / .04)", border: "1px solid var(--line-2)", fontSize: 12.5, color: "var(--fg)" }}>Account</span>
           </div>
         </div>
       </header>
 
-      {/* Content */}
-      <main className="max-w-2xl mx-auto px-6 py-12 space-y-8">
-        <div>
-          <h1 className="text-xl font-medium text-gray-100">Account</h1>
-          <p className="text-sm text-gray-500 mt-1">Manage your profile and settings</p>
+      <main style={{ maxWidth: 680, margin: "0 auto", padding: "48px 32px 80px" }}>
+        <div style={{ marginBottom: 32 }}>
+          <h1 style={{ fontSize: 24, fontWeight: 500, letterSpacing: "-0.02em", margin: 0 }}>
+            Your <span className="font-serif" style={{ color: "var(--accent)" }}>account</span>
+          </h1>
+          <p style={{ fontSize: 13.5, color: "var(--fg-2)", marginTop: 8, marginBottom: 0 }}>Identity, security, and settings. Almost everything is stored on your devices.</p>
         </div>
 
         {/* Profile */}
-        <section className="rounded-md border border-gray-800/40 bg-gray-900/50 p-6 space-y-5">
-          <p className="text-xs uppercase tracking-wider text-gray-500">Profile</p>
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-gray-800 border border-gray-700/50 flex items-center justify-center text-lg text-gray-400 uppercase">
-              {user?.username?.charAt(0) || "?"}
+        <Section title="Profile" subtitle="Your public identity on the mesh">
+          <div className="flex items-center gap-4" style={{ marginBottom: 20 }}>
+            <div style={{ width: 52, height: 52, borderRadius: 99, background: "oklch(0.78 0.15 160 / .1)", border: "1px solid oklch(0.78 0.15 160 / .25)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, color: "var(--accent)", fontWeight: 600, letterSpacing: "-0.01em" }}>
+              {user?.username?.slice(0, 2).toUpperCase() ?? "??"}
             </div>
             <div>
-              <p className="text-sm text-gray-100 font-medium">{user?.username}</p>
-              <p className="text-xs text-gray-500">{user?.email}</p>
+              <div style={{ fontSize: 15, fontWeight: 500, color: "var(--fg)" }}>{user?.username}</div>
+              <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 3 }}>{user?.email}</div>
             </div>
           </div>
-
-          <div className="space-y-3 pt-2">
-            <label className="block">
-              <span className="text-xs text-gray-500">Display name</span>
-              <div className="flex gap-2 mt-1.5">
-                <input
-                  type="text"
-                  value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
-                  className="flex-1 bg-gray-800/80 border border-gray-700/50 rounded-md px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-gray-600 transition-colors"
-                />
-                <button
-                  onClick={handleSaveName}
-                  disabled={saving || !displayName.trim() || displayName === user?.username}
-                  className="px-4 py-2 rounded-md bg-gray-800/80 border border-gray-700/50 text-sm text-gray-300 hover:text-gray-100 hover:border-gray-600 disabled:opacity-40 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
-                >
-                  {saving ? "Saving..." : "Save"}
-                </button>
+          <label style={{ display: "block" }}>
+            <span style={{ fontSize: 11.5, color: "var(--fg-2)", fontWeight: 500 }}>Display name</span>
+            <div className="flex gap-2 mt-1.5">
+              <input type="text" value={displayName} onChange={e => setDisplayName(e.target.value)} className="vt-input" style={{ flex: 1 }} />
+              <button onClick={handleSaveName} disabled={saving || !displayName.trim() || displayName === user?.username} className="btn btn-ghost" style={{ fontSize: 12.5 }}>{saving ? "Saving…" : "Save"}</button>
+            </div>
+          </label>
+          <div style={{ marginTop: 18, display: "flex", flexDirection: "column", gap: 10 }}>
+            {[["User ID", user?.user_id ?? "—", true], ["Email", user?.email ?? "—", false], ["Member since", user?.created_at ? new Date(user.created_at).toLocaleDateString() : "—", false]].map(([l,v,mono]) => (
+              <div key={l as string} className="flex justify-between items-center">
+                <span style={{ fontSize: 13, color: "var(--fg-2)" }}>{l}</span>
+                <span className={mono ? "font-mono" : ""} style={{ fontSize: 12.5, color: "var(--muted)" }}>{v}</span>
               </div>
-            </label>
+            ))}
           </div>
+        </Section>
 
-          <div className="border-t border-gray-800/40 pt-4 space-y-3">
-            <DetailRow label="User ID" value={user?.user_id || "--"} mono />
-            <DetailRow label="Email" value={user?.email || "--"} />
-            <DetailRow label="Member since" value={user?.created_at ? new Date(user.created_at).toLocaleDateString() : "--"} />
-          </div>
-        </section>
-
-        {/* Password */}
-        <section className="rounded-md border border-gray-800/40 bg-gray-900/50 p-6 space-y-4">
-          <p className="text-xs uppercase tracking-wider text-gray-500">Security</p>
-
-          {showPasswordForm ? (
-            <form onSubmit={handleChangePassword} className="space-y-3">
-              {passwordError && (
-                <div className="rounded-md bg-red-900/50 border border-red-800 px-3 py-2 text-xs text-red-300">
-                  {passwordError}
-                </div>
-              )}
+        {/* Security */}
+        <Section title="Security" subtitle="Keys, sessions, and password">
+          {showPwForm ? (
+            <form onSubmit={handleChangePassword} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {pwError && <div style={{ padding: "10px 12px", borderRadius: 8, background: "oklch(0.72 0.17 25 / .1)", border: "1px solid oklch(0.72 0.17 25 / .25)", fontSize: 12.5, color: "var(--red)" }}>{pwError}</div>}
               <div>
-                <label className="text-xs text-gray-500">Current password</label>
-                <input
-                  type="password"
-                  value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                  autoFocus
-                  required
-                  className="w-full mt-1 bg-gray-800/80 border border-gray-700/50 rounded-md px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-gray-600 transition-colors"
-                />
+                <label style={{ fontSize: 11.5, color: "var(--fg-2)", display: "block", marginBottom: 6 }}>Current password</label>
+                <input type="password" value={currentPw} onChange={e => setCurrentPw(e.target.value)} required className="vt-input" autoFocus />
               </div>
               <div>
-                <label className="text-xs text-gray-500">New password</label>
-                <input
-                  type="password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  required
-                  placeholder="At least 8 characters"
-                  className="w-full mt-1 bg-gray-800/80 border border-gray-700/50 rounded-md px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-gray-600 transition-colors"
-                />
+                <label style={{ fontSize: 11.5, color: "var(--fg-2)", display: "block", marginBottom: 6 }}>New password</label>
+                <input type="password" value={newPw} onChange={e => setNewPw(e.target.value)} required className="vt-input" placeholder="At least 8 characters" />
               </div>
               <div>
-                <label className="text-xs text-gray-500">Confirm new password</label>
-                <input
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  required
-                  className="w-full mt-1 bg-gray-800/80 border border-gray-700/50 rounded-md px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-gray-600 transition-colors"
-                />
+                <label style={{ fontSize: 11.5, color: "var(--fg-2)", display: "block", marginBottom: 6 }}>Confirm new password</label>
+                <input type="password" value={confirmPw} onChange={e => setConfirmPw(e.target.value)} required className="vt-input" />
               </div>
-              <div className="flex gap-2 justify-end pt-1">
-                <button
-                  type="button"
-                  onClick={() => { setShowPasswordForm(false); setPasswordError(""); }}
-                  className="px-3 py-1.5 rounded-md text-sm text-gray-500 hover:text-gray-300 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={passwordLoading}
-                  className="px-4 py-1.5 rounded-md bg-gray-100 text-gray-900 text-sm font-medium hover:bg-white disabled:opacity-40 transition-colors"
-                >
-                  {passwordLoading ? "Updating..." : "Update password"}
-                </button>
+              <div className="flex gap-2 justify-end">
+                <button type="button" onClick={() => { setShowPwForm(false); setPwError(""); }} className="btn btn-ghost" style={{ fontSize: 12.5 }}>Cancel</button>
+                <button type="submit" disabled={pwLoading} className="btn btn-primary" style={{ fontSize: 12.5 }}>{pwLoading ? "Updating…" : "Update password"}</button>
               </div>
             </form>
           ) : (
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-300">Password</p>
-                <p className="text-xs text-gray-600 mt-0.5">Change your account password</p>
+                <div style={{ fontSize: 13.5, fontWeight: 500 }}>Password</div>
+                <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 3 }}>Change your account password</div>
               </div>
-              <button
-                onClick={() => setShowPasswordForm(true)}
-                className="px-4 py-1.5 rounded-md bg-gray-800/80 border border-gray-700/50 text-xs text-gray-300 hover:text-gray-100 hover:border-gray-600 transition-all duration-200"
-              >
-                Change
-              </button>
+              <button onClick={() => setShowPwForm(true)} className="btn btn-ghost" style={{ fontSize: 12.5 }}>Change</button>
             </div>
           )}
-        </section>
+        </Section>
 
         {/* Notifications */}
-        <section className="rounded-md border border-gray-800/40 bg-gray-900/50 p-6 space-y-4">
-          <p className="text-xs uppercase tracking-wider text-gray-500">Notifications</p>
-          <Toggle
-            label="Transfer notifications"
-            desc="Get notified when a transfer completes or fails"
-            checked={notifications.transfers}
-            onChange={(v) => setNotifications((p) => ({ ...p, transfers: v }))}
-          />
-          <Toggle
-            label="Device alerts"
-            desc="Notify on new device pairing requests"
-            checked={notifications.devices}
-            onChange={(v) => setNotifications((p) => ({ ...p, devices: v }))}
-          />
-          <Toggle
-            label="Session updates"
-            desc="Notify when devices join or leave sessions"
-            checked={notifications.sessions}
-            onChange={(v) => setNotifications((p) => ({ ...p, sessions: v }))}
-          />
-        </section>
+        <Section title="Notifications" subtitle="When to be notified">
+          {[
+            ["transfers", "Transfer notifications", "Get notified when a transfer completes or fails"],
+            ["devices",   "Device alerts",          "Notify on new pairing requests"],
+            ["sessions",  "Session updates",        "Notify when devices join or leave sessions"],
+          ].map(([k, l, d]) => (
+            <div key={k} className="flex items-center justify-between" style={{ marginBottom: 14 }}>
+              <div>
+                <div style={{ fontSize: 13.5, fontWeight: 500 }}>{l}</div>
+                <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 3 }}>{d}</div>
+              </div>
+              <button onClick={() => setNotifications(p => ({ ...p, [k]: !p[k as keyof typeof p] }))}
+                style={{ width: 36, height: 20, borderRadius: 99, background: notifications[k as keyof typeof notifications] ? "oklch(0.78 0.15 160 / .3)" : "var(--line)", border: `1px solid ${notifications[k as keyof typeof notifications] ? "oklch(0.78 0.15 160 / .5)" : "var(--line-2)"}`, position: "relative", cursor: "pointer" }}>
+                <span style={{ position: "absolute", top: 1, left: notifications[k as keyof typeof notifications] ? 16 : 1, width: 16, height: 16, borderRadius: 99, background: notifications[k as keyof typeof notifications] ? "var(--accent)" : "var(--muted)", transition: "left .18s" }} />
+              </button>
+            </div>
+          ))}
+        </Section>
 
-        {/* Theme */}
-        <section className="rounded-md border border-gray-800/40 bg-gray-900/50 p-6 space-y-4">
-          <p className="text-xs uppercase tracking-wider text-gray-500">Appearance</p>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-300">Theme</p>
-              <p className="text-xs text-gray-600 mt-0.5">Light mode coming soon</p>
+        {/* Danger */}
+        <div style={{ border: "1px solid oklch(0.72 0.17 25 / .2)", borderRadius: 14, padding: 24, background: "oklch(0.72 0.17 25 / .02)" }}>
+          <div style={{ fontSize: 11, color: "oklch(0.72 0.17 25 / .6)", textTransform: "uppercase", letterSpacing: ".1em", fontWeight: 600, marginBottom: 18 }}>Danger zone</div>
+          {[
+            { t: "Sign out everywhere", d: "Revoke all active sessions across all devices", fn: () => { toast.success("All sessions revoked"); logout(); navigate("/login"); }, label: "Revoke all" },
+            { t: "Sign out",            d: "Sign out of this browser",                       fn: handleLogout, label: "Sign out" },
+          ].map(a => (
+            <div key={a.t} className="flex items-center justify-between" style={{ marginBottom: 14 }}>
+              <div>
+                <div style={{ fontSize: 13.5, fontWeight: 500 }}>{a.t}</div>
+                <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 3 }}>{a.d}</div>
+              </div>
+              <button onClick={a.fn} className="btn btn-danger" style={{ fontSize: 12.5 }}>{a.label}</button>
             </div>
-            <span className="px-3 py-1 rounded-md bg-gray-800/80 border border-gray-700/50 text-xs text-gray-400">Dark</span>
-          </div>
-        </section>
-
-        {/* Danger Zone */}
-        <section className="rounded-md border border-red-900/20 bg-red-950/10 p-6 space-y-4">
-          <p className="text-xs uppercase tracking-wider text-red-400/60">Danger Zone</p>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-300">Sign out everywhere</p>
-              <p className="text-xs text-gray-600 mt-0.5">Revoke all active sessions across all devices</p>
-            </div>
-            <button
-              onClick={handleRevokeAll}
-              className="px-4 py-1.5 rounded-md text-xs text-red-400 border border-red-900/30 hover:border-red-400/30 hover:bg-red-400/5 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
-            >
-              Revoke all
-            </button>
-          </div>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-300">Sign out</p>
-              <p className="text-xs text-gray-600 mt-0.5">Sign out of this browser</p>
-            </div>
-            <button
-              onClick={handleLogout}
-              className="px-4 py-1.5 rounded-md text-xs text-red-400 border border-red-900/30 hover:border-red-400/30 hover:bg-red-400/5 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
-            >
-              Sign out
-            </button>
-          </div>
-        </section>
+          ))}
+        </div>
       </main>
     </div>
   );
 }
 
-function DetailRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+function Section({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between">
-      <span className="text-sm text-gray-400">{label}</span>
-      <span className={`text-xs text-gray-500 ${mono ? "font-mono" : ""}`}>{value}</span>
-    </div>
-  );
-}
-
-function Toggle({ label, desc, checked, onChange }: { label: string; desc: string; checked: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <div className="flex items-center justify-between">
-      <div>
-        <p className="text-sm text-gray-300">{label}</p>
-        <p className="text-xs text-gray-600 mt-0.5">{desc}</p>
+    <div style={{ border: "1px solid var(--line)", borderRadius: 14, padding: 24, marginBottom: 18 }}>
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ fontSize: 15, fontWeight: 500, letterSpacing: "-0.005em" }}>{title}</div>
+        {subtitle && <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>{subtitle}</div>}
       </div>
-      <button
-        onClick={() => onChange(!checked)}
-        className={`w-9 h-5 rounded-full relative transition-colors duration-200 ${checked ? "bg-emerald-500/80" : "bg-gray-700"}`}
-      >
-        <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform duration-200 ${checked ? "translate-x-4" : "translate-x-0.5"}`} />
-      </button>
+      {children}
     </div>
   );
 }
