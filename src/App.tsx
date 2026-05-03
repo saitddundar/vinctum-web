@@ -18,7 +18,6 @@ import Friends from "./pages/Friends";
 import Incoming from "./pages/Incoming";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
-import Nodes from "./pages/Nodes";
 import Anomalies from "./pages/Anomalies";
 import NotFound from "./pages/NotFound";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -57,8 +56,7 @@ export default function App() {
                 <Route path="/transfers" element={<Transfers />} />
                 <Route path="/friends" element={<Friends />} />
                 <Route path="/incoming" element={<Incoming />} />
-                <Route path="/nodes" element={<Nodes />} />
-                <Route path="/anomalies" element={<Anomalies />} />
+                <Route path="/network" element={<Anomalies />} />
               </Route>
             </Route>
             <Route path="*" element={<NotFound />} />
