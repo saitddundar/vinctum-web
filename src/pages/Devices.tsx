@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Monitor, Smartphone, Tablet, MonitorSmartphone } from "lucide-react";
+import { Monitor, Smartphone, Tablet, MonitorSmartphone, Copy, Check } from "lucide-react";
 import type { Device } from "../types/device";
 import { normalizeDeviceType, toProtoDeviceType } from "../types/device";
 import {
@@ -311,7 +311,10 @@ export default function Devices() {
                   <span className="text-xs text-gray-600">{timeAgo(d.last_active)}</span>
                 </div>
                 {d.node_id && (
-                  <p className="text-xs text-gray-600 font-mono mt-1">{d.node_id}</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <p className="text-xs text-gray-600 font-mono truncate flex-1">{d.node_id}</p>
+                    <CopyButton text={d.node_id} />
+                  </div>
                 )}
               </button>
             ))
@@ -335,8 +338,11 @@ export default function Devices() {
               <DetailRow label="Last Active" value={timeAgo(selected.last_active)} />
               {selected.node_id && (
                 <div>
-                  <p className="text-xs text-gray-500 mb-1">Node ID</p>
-                  <p className="text-xs text-gray-400 font-mono break-all">{selected.node_id}</p>
+                  <p className="text-xs text-gray-500 mb-1">Node ID <span className="text-gray-700 ml-1">— share this to receive files</span></p>
+                  <div className="flex items-start gap-2">
+                    <p className="text-xs text-gray-400 font-mono break-all flex-1">{selected.node_id}</p>
+                    <CopyButton text={selected.node_id} />
+                  </div>
                 </div>
               )}
               {selected.fingerprint && (
@@ -461,6 +467,26 @@ export default function Devices() {
         </div>
       )}
     </div>
+  );
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  function handleCopy(e: React.MouseEvent) {
+    e.stopPropagation();
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  }
+  return (
+    <button
+      onClick={handleCopy}
+      title="Copy to clipboard"
+      className="shrink-0 p-0.5 rounded text-gray-600 hover:text-emerald-400 transition-colors"
+    >
+      {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+    </button>
   );
 }
 

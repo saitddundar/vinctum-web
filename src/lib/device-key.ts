@@ -123,6 +123,20 @@ export async function getRemoteDeviceKey(deviceId: string): Promise<Uint8Array> 
 }
 
 /**
+ * Fetches a remote node's public key from the server using its node_id.
+ * Used for cross-user E2E key exchange where only the node_id is known.
+ * Returns the raw 32-byte public key.
+ */
+export async function getRemoteDeviceKeyByNodeId(nodeId: string): Promise<Uint8Array> {
+  const { data } = await api.get(`/v1/nodes/${nodeId}/key`);
+  const key: DeviceKeyInfo = data.key;
+  const binary = atob(key.kex_public_key);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+/**
  * Ensures the device has a keypair generated and uploaded.
  * Idempotent — skips if keys already exist locally.
  */
