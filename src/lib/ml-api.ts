@@ -33,3 +33,26 @@ export async function scanNodes(): Promise<ScanResponse> {
   return data;
 }
 
+export interface NodeMetricsData {
+  node_id: string;
+  total_events: number;
+  successes: number;
+  failures: number;
+  timeouts: number;
+  reroutes: number;
+  circuit_opens: number;
+  avg_latency_ms: number;
+  min_latency_ms: number;
+  max_latency_ms: number;
+  p95_latency_ms: number;
+  total_bytes: number;
+  avg_bytes_per_op: number;
+  failure_rate: number;
+  uptime: number;
+}
+
+export async function fetchNodeMetrics(): Promise<{ nodes: NodeMetricsData[] }> {
+  const { data } = await api.get("/v1/nodes/metrics");
+  return data;
+}
+
