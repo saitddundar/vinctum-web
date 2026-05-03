@@ -1,48 +1,24 @@
-import { useEffect, useState } from "react";
-import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
-import { LayoutDashboard, Monitor, Users, Send, Menu, X, LogOut, UserPlus, Inbox, Bell } from "lucide-react";
+import { useState } from "react";
+import { NavLink, Outlet, useNavigate, Link } from "react-router-dom";
+import {
+  Activity, Monitor, Users, Send, Network, Shield,
+  Settings, LogOut, Bell, Search, X, Menu,
+} from "lucide-react";
 import { useAuth } from "../context/AuthContext";
-import { useNotifications } from "../context/NotificationContext";
-import { registerDevice } from "../lib/device-api";
-import { getDeviceFingerprint, guessDeviceType } from "../lib/fingerprint";
-import { toProtoDeviceType } from "../types/device";
-import { ensureDeviceKeys } from "../lib/device-key";
 
-const navItems = [
-  { to: "/dashboard", label: "Overview", icon: LayoutDashboard },
-  { to: "/devices", label: "Devices", icon: Monitor },
-  { to: "/sessions", label: "Sessions", icon: Users },
-  { to: "/transfers", label: "File Sharing", icon: Send },
-  { to: "/friends", label: "Friends", icon: UserPlus },
-  { to: "/incoming", label: "Incoming", icon: Inbox },
+const NAV = [
+  { to: "/dashboard", label: "Overview",   Icon: Activity },
+  { to: "/transfers", label: "Transfers",  Icon: Send },
+  { to: "/devices",   label: "Devices",    Icon: Monitor },
+  { to: "/sessions",  label: "Sessions",   Icon: Users },
+  { to: "/nodes",     label: "Nodes",      Icon: Network },
+  { to: "/anomalies", label: "Security",   Icon: Shield },
 ];
 
 export default function Layout() {
   const { user, logout } = useAuth();
-  const { counts } = useNotifications();
   const navigate = useNavigate();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-
-  // On every app load: ensure this device is registered and has E2E keys uploaded.
-  // This makes the device discoverable for cross-user file transfers immediately.
-  useEffect(() => {
-    if (!user) return;
-    (async () => {
-      try {
-        const fp = await getDeviceFingerprint();
-        // Register or re-register (idempotent via fingerprint check in backend)
-        const res = await registerDevice({
-          name: navigator.userAgent.includes("Mobile") ? "Mobile Browser" : "Desktop Browser",
-          device_type: toProtoDeviceType(guessDeviceType()),
-          fingerprint: fp,
-        });
-        // Upload X25519 public key for this device (idempotent)
-        await ensureDeviceKeys(res.device.device_id);
-      } catch {
-        // Silent fail — non-critical background setup
-      }
-    })();
-  }, [user?.user_id]);
+  const [open, setOpen] = useState(false);
 
   function handleLogout() {
     logout();
@@ -50,112 +26,172 @@ export default function Layout() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100 flex">
+    <div className="min-h-screen flex" style={{ background: "var(--bg)" }}>
       {/* Mobile overlay */}
-      {sidebarOpen && (
+      {open && (
         <div
-          className="fixed inset-0 bg-black/50 z-40 md:hidden"
-          onClick={() => setSidebarOpen(false)}
+          className="fixed inset-0 z-40 md:hidden"
+          style={{ background: "rgba(0,0,0,.5)" }}
+          onClick={() => setOpen(false)}
         />
       )}
 
       {/* Sidebar */}
       <aside
-        className={`w-52 border-r border-gray-800/40 bg-gray-950/90 backdrop-blur-sm flex flex-col fixed inset-y-0 left-0 z-50 transition-transform duration-200 ${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
-        } md:translate-x-0`}
+        className={`fixed inset-y-0 left-0 z-50 flex flex-col transition-transform duration-200 md:translate-x-0 md:static md:z-auto ${
+          open ? "translate-x-0" : "-translate-x-full"
+        }`}
+        style={{
+          width: 220,
+          background: "oklch(0.148 0.012 235)",
+          borderRight: "1px solid var(--line)",
+          flexShrink: 0,
+        }}
       >
-        <div className="h-14 flex items-center justify-between px-5 border-b border-gray-800/40">
-          <Link to="/" className="text-base font-medium tracking-tight text-gray-200 hover:text-gray-100 transition-colors">
-            vinctum
+        {/* Wordmark */}
+        <div
+          className="flex items-center justify-between"
+          style={{ padding: "22px 20px 18px", borderBottom: "1px solid var(--line)" }}
+        >
+          <Link to="/" className="flex items-center gap-2" style={{ textDecoration: "none" }}>
+            <span className="logo-mark" />
+            <span style={{ fontSize: 15, fontWeight: 600, letterSpacing: "-0.02em", color: "var(--fg)" }}>
+              vinctum
+            </span>
           </Link>
-          <div className="flex items-center gap-2">
-            {counts.total > 0 && (
-              <Link to="/incoming" className="relative text-gray-400 hover:text-emerald-400 transition-colors">
-                <Bell className="w-4 h-4" />
-                <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-emerald-500 text-[10px] font-bold text-white rounded-full flex items-center justify-center">
-                  {counts.total > 9 ? "9+" : counts.total}
-                </span>
-              </Link>
-            )}
-            <button
-              onClick={() => setSidebarOpen(false)}
-              className="md:hidden text-gray-500 hover:text-gray-300 transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
+          <button
+            className="md:hidden"
+            onClick={() => setOpen(false)}
+            style={{ color: "var(--muted-2)", background: "none", border: "none", cursor: "pointer" }}
+          >
+            <X size={16} />
+          </button>
         </div>
 
-        <nav className="flex-1 px-3 py-4 space-y-0.5">
-          {navItems.map((item) => (
+        {/* Nav */}
+        <nav style={{ padding: "12px 10px", flex: 1, display: "flex", flexDirection: "column", gap: 1 }}>
+          {NAV.map(({ to, label, Icon }) => (
             <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.to === "/"}
-              onClick={() => setSidebarOpen(false)}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-all duration-200 ${
-                  isActive
-                    ? "bg-emerald-500/10 text-emerald-400 border-l-2 border-emerald-400 ml-0"
-                    : "text-gray-500 hover:text-gray-300 border-l-2 border-transparent"
-                }`
-              }
+              key={to}
+              to={to}
+              onClick={() => setOpen(false)}
+              className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}
             >
-              <item.icon className="w-4 h-4" />
-              {item.label}
-              {item.to === "/friends" && counts.friend_requests > 0 && (
-                <span className="ml-auto w-5 h-5 bg-emerald-500 text-[10px] font-bold text-white rounded-full flex items-center justify-center">
-                  {counts.friend_requests}
-                </span>
-              )}
-              {item.to === "/incoming" && counts.incoming_transfers > 0 && (
-                <span className="ml-auto w-5 h-5 bg-emerald-500 text-[10px] font-bold text-white rounded-full flex items-center justify-center">
-                  {counts.incoming_transfers}
-                </span>
-              )}
+              <Icon size={14} />
+              <span style={{ flex: 1 }}>{label}</span>
             </NavLink>
           ))}
         </nav>
 
-        <div className="px-3 py-4 border-t border-gray-800/40">
-          <div className="px-3 mb-3">
-            <p className="text-sm text-gray-300 truncate">{user?.username}</p>
-            <p className="text-xs text-gray-600 truncate">{user?.email}</p>
+        {/* Mesh pulse */}
+        <div style={{ margin: "0 10px 10px", padding: "10px 12px", borderRadius: 9, border: "1px solid var(--line)", background: "oklch(1 0 0 / .015)" }}>
+          <div className="flex items-center justify-between" style={{ marginBottom: 6 }}>
+            <span style={{ fontSize: 10, color: "var(--muted-2)", textTransform: "uppercase", letterSpacing: ".09em", fontWeight: 600 }}>Mesh</span>
+            <div className="flex items-center gap-1.5">
+              <span className="live-dot" />
+              <span style={{ fontSize: 10, color: "var(--fg-2)" }}>live</span>
+            </div>
           </div>
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-gray-500 hover:text-red-400 hover:bg-red-500/5 transition-all duration-200 text-left"
-          >
-            <LogOut className="w-4 h-4" />
-            Logout
+          <div className="flex gap-4">
+            {[["Peers", "4/5"], ["Latency", "18ms"], ["Uptime", "99%"]].map(([l, v]) => (
+              <div key={l}>
+                <div style={{ fontSize: 9, color: "var(--muted-2)", letterSpacing: ".07em", textTransform: "uppercase" }}>{l}</div>
+                <div className="font-mono" style={{ fontSize: 14, color: "var(--fg)", letterSpacing: "-0.02em", marginTop: 2 }}>{v}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* User */}
+        <div style={{ borderTop: "1px solid var(--line)", padding: "12px 10px", display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{
+            width: 30, height: 30, borderRadius: 99,
+            background: "oklch(0.78 0.15 160 / .15)",
+            border: "1px solid oklch(0.78 0.15 160 / .3)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 11, fontWeight: 600, color: "var(--accent)", flexShrink: 0,
+          }}>
+            {user?.username?.slice(0, 2).toUpperCase() ?? "??"}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 12, color: "var(--fg)", fontWeight: 500, lineHeight: 1.3 }}>{user?.username}</div>
+            <div style={{ fontSize: 10, color: "var(--muted-2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Personal · free</div>
+          </div>
+          <button onClick={handleLogout} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted-2)", padding: 4 }}>
+            <LogOut size={13} />
           </button>
         </div>
       </aside>
 
-      <main className="flex-1 md:ml-52 relative">
-        {/* Background orbs */}
-        <div className="fixed inset-0 md:left-52 pointer-events-none overflow-hidden">
-          <div className="bg-orb bg-orb-emerald" style={{ top: "10%", right: "15%" }} />
-          <div className="bg-orb bg-orb-cyan" style={{ bottom: "20%", left: "10%" }} />
-          <div className="bg-orb bg-orb-violet" style={{ top: "60%", right: "40%" }} />
-        </div>
-
-        {/* Mobile header */}
-        <div className="sticky top-0 z-30 md:hidden flex items-center h-14 px-4 border-b border-gray-800/40 bg-gray-950/90 backdrop-blur-sm">
+      {/* Main */}
+      <div className="flex flex-col flex-1 min-w-0">
+        {/* Topbar */}
+        <header style={{
+          height: 58, borderBottom: "1px solid var(--line)",
+          display: "flex", alignItems: "center", padding: "0 32px", gap: 16,
+          background: "oklch(0.152 0.012 235 / .7)", backdropFilter: "blur(10px)",
+          position: "sticky", top: 0, zIndex: 30,
+        }}>
+          {/* Mobile menu */}
           <button
-            onClick={() => setSidebarOpen(true)}
-            className="text-gray-400 hover:text-gray-200 transition-colors"
+            className="md:hidden"
+            onClick={() => setOpen(true)}
+            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)" }}
           >
-            <Menu className="w-5 h-5" />
+            <Menu size={18} />
           </button>
-          <span className="ml-3 text-sm font-medium text-gray-300">vinctum</span>
-        </div>
 
-        <div className="relative max-w-4xl mx-auto px-4 md:px-8 py-6 md:py-8">
+          <div style={{ flex: 1 }} />
+
+          {/* Search */}
+          <div className="hidden md:flex items-center gap-2" style={{
+            padding: "7px 13px", border: "1px solid var(--line)", borderRadius: 9,
+            background: "oklch(1 0 0 / .02)", width: 240, cursor: "text",
+          }}>
+            <Search size={12} style={{ color: "var(--muted-2)" }} />
+            <span style={{ fontSize: 12, color: "var(--muted-2)", flex: 1 }}>Search…</span>
+            <span className="font-mono" style={{ fontSize: 10, color: "var(--muted-2)", background: "oklch(1 0 0 / .06)", padding: "2px 5px", borderRadius: 4 }}>⌘K</span>
+          </div>
+
+          {/* Notifications */}
+          <div style={{ position: "relative" }}>
+            <button style={{
+              width: 32, height: 32, borderRadius: 9, border: "1px solid var(--line)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              background: "none", cursor: "pointer", color: "var(--muted)",
+            }}>
+              <Bell size={14} />
+            </button>
+            <span style={{
+              position: "absolute", top: 6, right: 6,
+              width: 6, height: 6, borderRadius: 99,
+              background: "var(--amber)", border: "1.5px solid oklch(0.152 0.012 235)",
+            }} />
+          </div>
+
+          {/* Settings link */}
+          <Link to="/account">
+            <button style={{
+              width: 32, height: 32, borderRadius: 9, border: "1px solid var(--line)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              background: "none", cursor: "pointer", color: "var(--muted)",
+            }}>
+              <Settings size={14} />
+            </button>
+          </Link>
+
+          {/* Send file */}
+          <Link to="/transfers" className="btn btn-primary" style={{ fontSize: 12, padding: "7px 13px" }}>
+            <Send size={12} />
+            Send file
+          </Link>
+        </header>
+
+        {/* Page content */}
+        <main style={{ flex: 1, padding: "32px", maxWidth: 1200, width: "100%", margin: "0 auto" }}>
           <Outlet />
-        </div>
-      </main>
+        </main>
+      </div>
     </div>
   );
 }
