@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { forgotPassword } from "../lib/auth-api";
+import { AuthShell } from "../components/AuthShell";
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
@@ -10,96 +11,60 @@ export default function ForgotPassword() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setLoading(true);
-
-    try {
-      await forgotPassword(email);
-      setSent(true);
-    } catch {
-      setSent(true);
-    } finally {
-      setLoading(false);
-    }
+    try { await forgotPassword(email); } catch {}
+    finally { setLoading(false); setSent(true); }
   }
 
-  if (sent) {
-    return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center px-4 relative overflow-hidden">
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="bg-orb bg-orb-emerald" style={{ top: "30%", right: "25%" }} />
-        </div>
-
-        <div className="relative w-full max-w-sm space-y-6 text-center">
+  const side = (
+    <div style={{ position: "absolute", inset: 0, padding: 48, display: "flex", flexDirection: "column", justifyContent: "center" }}>
+      <div style={{ fontSize: 11, color: "var(--muted-2)", textTransform: "uppercase", letterSpacing: ".09em", marginBottom: 20, fontWeight: 600 }}>Recovery paths</div>
+      {[
+        { icon: "📱", t: "Paired device approval", d: "Your other device shows a prompt — one tap and you're in.", rec: true },
+        { icon: "🔑", t: "Recovery phrase",        d: "12 words you wrote down at signup. Works even if every device is lost." },
+        { icon: "👥", t: "Social recovery",        d: "3 of 5 trusted contacts attest. Available on Team plan.", coming: true },
+      ].map((p, i) => (
+        <div key={i} className="glass-card-static" style={{ padding: 16, marginBottom: 10, display: "flex", gap: 12 }}>
+          <div style={{ width: 34, height: 34, borderRadius: 9, background: "oklch(0.78 0.15 160 / .08)", border: "1px solid oklch(0.78 0.15 160 / .2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, flexShrink: 0 }}>{p.icon}</div>
           <div>
-            <h1 className="text-2xl font-semibold text-white">vinctum</h1>
-            <p className="text-gray-400 text-sm mt-1">Check your email</p>
+            <div className="flex items-center gap-2">
+              <span style={{ fontSize: 13, color: "var(--fg)", fontWeight: 500 }}>{p.t}</span>
+              {p.rec && <span className="chip chip-emerald" style={{ fontSize: 9 }}>recommended</span>}
+              {p.coming && <span className="pill pill-muted">coming</span>}
+            </div>
+            <p style={{ fontSize: 12, color: "var(--muted)", margin: "4px 0 0", lineHeight: 1.5 }}>{p.d}</p>
           </div>
-
-          <div className="glass-card-static p-6 space-y-3">
-            <p className="text-sm text-gray-300">
-              If an account exists for <span className="text-gray-100">{email}</span>, we sent a password reset link.
-            </p>
-            <p className="text-xs text-gray-500">
-              The link expires in 30 minutes. Check your spam folder if you don't see it.
-            </p>
-          </div>
-
-          <Link to="/login" className="inline-block text-sm text-gray-400 hover:text-gray-300 transition-colors">
-            Back to sign in
-          </Link>
         </div>
-      </div>
-    );
-  }
+      ))}
+    </div>
+  );
 
-  return (
-    <div className="min-h-screen bg-gray-950 flex items-center justify-center px-4 relative overflow-hidden">
-      <div className="absolute inset-0 pointer-events-none">
-        <div className="bg-orb bg-orb-emerald" style={{ top: "20%", right: "25%" }} />
-        <div className="bg-orb bg-orb-violet" style={{ bottom: "30%", left: "20%" }} />
-      </div>
-
-      <div className="relative w-full max-w-sm space-y-6">
-        <div className="text-center">
-          <h1 className="text-2xl font-semibold text-white">vinctum</h1>
-          <p className="text-gray-400 text-sm mt-1">Reset your password</p>
-        </div>
-
-        <form onSubmit={handleSubmit} className="glass-card-static p-6 space-y-4">
-          <div>
-            <label htmlFor="email" className="block text-sm text-gray-400 mb-1">
-              Email address
-            </label>
-            <input
-              id="email"
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              autoFocus
-              className="w-full rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
-              placeholder="you@example.com"
-            />
-            <p className="text-xs text-gray-600 mt-1.5">
-              Enter the email associated with your account and we'll send a reset link.
-            </p>
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-md bg-emerald-500 px-4 py-2 text-sm font-medium text-gray-950 hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {loading ? "Sending..." : "Send reset link"}
-          </button>
-        </form>
-
-        <p className="text-center text-sm text-gray-400">
-          Remember your password?{" "}
-          <Link to="/login" className="text-emerald-400 hover:text-emerald-300">
-            Sign in
-          </Link>
+  if (sent) return (
+    <AuthShell title={<>Check your <span className="font-serif" style={{ color: "var(--accent)" }}>inbox.</span></>} side={side}
+      footer={<p style={{ textAlign: "center", fontSize: 13, color: "var(--muted)" }}><Link to="/login" style={{ color: "var(--accent)", textDecoration: "none" }}>Back to sign in</Link></p>}>
+      <div className="glass-card-static" style={{ padding: 24 }}>
+        <p style={{ fontSize: 14, color: "var(--fg-2)", lineHeight: 1.6 }}>
+          If an account exists for <strong style={{ color: "var(--fg)" }}>{email}</strong>, we sent a reset link. Check spam if nothing arrives in 2 minutes.
         </p>
       </div>
-    </div>
+    </AuthShell>
+  );
+
+  return (
+    <AuthShell
+      title={<>Recover your <span className="font-serif" style={{ color: "var(--accent)" }}>mesh.</span></>}
+      subtitle="Enter your email. If a paired device is online, we'll send an approval prompt to it."
+      footer={<p style={{ textAlign: "center", fontSize: 13, color: "var(--muted)" }}><Link to="/login" style={{ color: "var(--accent)", textDecoration: "none" }}>Back to sign in</Link></p>}
+      side={side}
+    >
+      <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <div>
+          <label style={{ fontSize: 12, color: "var(--fg-2)", fontWeight: 500, display: "block", marginBottom: 7 }}>Email address</label>
+          <input type="email" required value={email} onChange={e => setEmail(e.target.value)} className="vt-input" placeholder="you@example.com" autoFocus />
+        </div>
+        <button type="submit" disabled={loading} className="btn btn-primary" style={{ justifyContent: "center", padding: "11px 16px" }}>
+          {loading ? "Sending…" : "Send reset link"}
+        </button>
+      </form>
+    </AuthShell>
   );
 }
