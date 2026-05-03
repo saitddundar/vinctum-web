@@ -22,7 +22,7 @@ export async function getTransferStatus(transferId: string): Promise<TransferSta
 }
 
 export async function listTransfers(nodeId: string): Promise<{ transfers: TransferInfo[] }> {
-  const { data } = await api.get(`/v1/transfers/node/${nodeId}`);
+  const { data } = await api.get(`/v1/node-transfers/${nodeId}`);
   return data;
 }
 
@@ -46,7 +46,7 @@ export async function uploadChunk(
   formData.append("chunk_hash", chunkHash);
   formData.append("data", new Blob([data]), `chunk_${chunkIndex}`);
 
-  const { data: resp } = await api.post(`/v1/transfers/${transferId}/chunks`, formData, {
+  const { data: resp } = await api.post(`/v1/chunks/${transferId}`, formData, {
     headers: { "Content-Type": "multipart/form-data" },
     onUploadProgress: (e) => {
       if (onProgress && e.total) {
@@ -65,7 +65,7 @@ export async function downloadChunks(
   receiverNodeId: string,
   onProgress?: (chunksReceived: number, isLast: boolean) => void,
 ): Promise<Uint8Array[]> {
-  const resp = await api.get(`/v1/transfers/${transferId}/chunks`, {
+  const resp = await api.get(`/v1/chunks/${transferId}`, {
     params: { receiver_node_id: receiverNodeId, start_chunk: 0 },
     responseType: "text",
   });
@@ -99,7 +99,7 @@ export async function downloadChunks(
  * Downloads a single chunk by index.
  */
 export async function downloadChunk(transferId: string, chunkIndex: number): Promise<Uint8Array> {
-  const { data } = await api.get(`/v1/transfers/${transferId}/chunks/${chunkIndex}`, {
+  const { data } = await api.get(`/v1/chunks/${transferId}/${chunkIndex}`, {
     responseType: "arraybuffer",
   });
   return new Uint8Array(data);

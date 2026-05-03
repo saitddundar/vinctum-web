@@ -4,7 +4,8 @@ export type TransferStatus =
   | "TRANSFER_STATUS_IN_PROGRESS"
   | "TRANSFER_STATUS_COMPLETED"
   | "TRANSFER_STATUS_FAILED"
-  | "TRANSFER_STATUS_CANCELLED";
+  | "TRANSFER_STATUS_CANCELLED"
+  | "TRANSFER_STATUS_AWAITING_APPROVAL";
 
 export interface InitiateTransferRequest {
   sender_node_id: string;
@@ -17,6 +18,7 @@ export interface InitiateTransferRequest {
   chunk_size_bytes?: number;
   replication_factor?: number;
   sender_ephemeral_pubkey?: string; // base64 encoded 32-byte X25519 public key
+  auto_approve?: boolean;
 }
 
 export interface RouteHop {

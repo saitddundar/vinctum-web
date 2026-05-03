@@ -1,9 +1,11 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { toast } from "sonner";
-import { FileUp, Check, Upload, Lock, ShieldCheck, CircleDot } from "lucide-react";
+import { FileUp, Check, Upload, Lock, ShieldCheck, CircleDot, Users } from "lucide-react";
 import type { Device } from "../types/device";
 import type { TransferInfo, TransferStatus } from "../types/transfer";
+import type { Friend } from "../types/friend";
 import { listDevices } from "../lib/device-api";
+import { listFriends, getFriendDevices } from "../lib/friend-api";
 import {
   initiateTransfer,
   listTransfers,
@@ -15,6 +17,7 @@ import {
 import {
   ensureDeviceKeys,
   getRemoteDeviceKey,
+  getRemoteDeviceKeyByNodeId,
   generateEphemeralKeyPair,
   deriveTransferKey,
   deriveReceiverKey,
@@ -27,6 +30,7 @@ const statusLabel: Record<TransferStatus, string> = {
   TRANSFER_STATUS_COMPLETED: "Completed",
   TRANSFER_STATUS_FAILED: "Failed",
   TRANSFER_STATUS_CANCELLED: "Cancelled",
+  TRANSFER_STATUS_AWAITING_APPROVAL: "Awaiting Approval",
 };
 
 const statusColor: Record<TransferStatus, string> = {
@@ -36,6 +40,7 @@ const statusColor: Record<TransferStatus, string> = {
   TRANSFER_STATUS_COMPLETED: "text-emerald-400",
   TRANSFER_STATUS_FAILED: "text-red-400",
   TRANSFER_STATUS_CANCELLED: "text-gray-500",
+  TRANSFER_STATUS_AWAITING_APPROVAL: "text-amber-400",
 };
 
 type FilterStatus = "all" | "active" | "completed" | "failed";
@@ -76,6 +81,10 @@ export default function Transfers() {
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [targetDevice, setTargetDevice] = useState("");
+  const [sendMode, setSendMode] = useState<"device" | "friend">("device");
+  const [friends, setFriends] = useState<Friend[]>([]);
+  const [selectedFriend, setSelectedFriend] = useState<string>("");
+  const [friendDevices, setFriendDevices] = useState<Device[]>([]);
   const [sending, setSending] = useState(false);
   const [sendStep, setSendStep] = useState<TransferStep>("select");
   const [uploadProgress, setUploadProgress] = useState<{ sent: number; total: number } | null>(null);
@@ -91,9 +100,13 @@ export default function Transfers() {
 
   const fetchData = useCallback(async () => {
     try {
-      const devRes = await listDevices();
+      const [devRes, friendsList] = await Promise.all([
+        listDevices(),
+        listFriends().catch(() => [] as Friend[]),
+      ]);
       const approved = devRes.devices.filter((d) => d.is_approved && !d.is_revoked);
       setDevices(approved);
+      setFriends(friendsList);
 
       const first = approved.find((d) => d.node_id);
       if (first) {
@@ -139,8 +152,25 @@ export default function Transfers() {
     return () => clearInterval(interval);
   }, [transfers.map((t) => t.transfer_id + t.status).join(",")]);
 
+  async function handleSelectFriend(friendUserId: string) {
+    setSelectedFriend(friendUserId);
+    setTargetDevice("");
+    try {
+      const devs = await getFriendDevices(friendUserId);
+      setFriendDevices(devs);
+    } catch {
+      toast.error("Failed to load friend's devices");
+      setFriendDevices([]);
+    }
+  }
+
   async function handleSend() {
-    if (!selectedFile || !targetDevice || !myDevice?.node_id) return;
+    if (!selectedFile || !myDevice?.node_id) return;
+
+    const isFriend = sendMode === "friend";
+    if (isFriend && !targetDevice) return;
+    if (!isFriend && !targetDevice) return;
+
     setSending(true);
     setUploadProgress(null);
 
@@ -153,16 +183,32 @@ export default function Transfers() {
       const hashArray = Array.from(new Uint8Array(hashBuffer));
       const contentHash = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
 
-      const target = devices.find((d) => d.device_id === targetDevice);
-      if (!target?.node_id) throw new Error("Target device has no node ID");
+      let receiverNodeId: string;
+      let receiverStaticPub: Uint8Array;
 
-      const receiverStaticPub = await getRemoteDeviceKey(target.device_id);
+      if (isFriend) {
+        // Sending to a friend's device
+        const allDevs = [...devices, ...friendDevices];
+        const target = allDevs.find((d) => d.device_id === targetDevice);
+        if (!target?.node_id) throw new Error("Target device has no node ID");
+        receiverNodeId = target.node_id;
+        receiverStaticPub = await getRemoteDeviceKeyByNodeId(receiverNodeId);
+      } else {
+        // Sending to own device
+        const target = devices.find((d) => d.device_id === targetDevice);
+        if (!target?.node_id) throw new Error("Target device has no node ID");
+        receiverNodeId = target.node_id;
+        receiverStaticPub = await getRemoteDeviceKey(target.device_id);
+      }
+
+      // Generate ephemeral keypair ONCE and reuse it
       const ephemeral = await generateEphemeralKeyPair();
       const ephemeralPubB64 = btoa(String.fromCharCode(...ephemeral.publicKeyBytes));
 
+      // Initiate transfer to get the transfer_id
       const transfer = await initiateTransfer({
         sender_node_id: myDevice.node_id,
-        receiver_node_id: target.node_id,
+        receiver_node_id: receiverNodeId,
         filename: selectedFile.name,
         total_size_bytes: selectedFile.size,
         content_hash: contentHash,
@@ -170,6 +216,7 @@ export default function Transfers() {
         sender_ephemeral_pubkey: ephemeralPubB64,
       });
 
+      // Derive AES key with actual transfer_id
       const aesKey = await deriveTransferKey(
         ephemeral.privateKey,
         receiverStaticPub,
@@ -196,6 +243,8 @@ export default function Transfers() {
       setUploadProgress(null);
       setSelectedFile(null);
       setTargetDevice("");
+      setSelectedFriend("");
+      setFriendDevices([]);
       toast.success("File sent successfully");
       await fetchData();
     } catch (err: any) {
@@ -494,7 +543,7 @@ export default function Transfers() {
           <div className="glass-card-static p-6 w-full max-w-md space-y-5 shadow-[0_20px_40px_rgba(0,0,0,0.45)]" onClick={(e) => e.stopPropagation()}>
             <div>
               <h2 className="text-base font-medium text-gray-100">Send File</h2>
-              <p className="text-xs text-gray-500 mt-1">Select a file and recipient device</p>
+              <p className="text-xs text-gray-500 mt-1">Select a file and recipient</p>
             </div>
 
             <div>
@@ -523,47 +572,156 @@ export default function Transfers() {
               )}
             </div>
 
+            {/* Recipient mode toggle */}
             <div>
-              <p className="text-xs text-gray-500 mb-2">Send to</p>
-              {otherDevices.length > 0 ? (
+              <div className="flex gap-1 p-1 bg-gray-900/60 rounded-lg mb-3">
+                <button
+                  onClick={() => { setSendMode("device"); setTargetDevice(""); setSelectedFriend(""); setFriendDevices([]); }}
+                  className={`flex-1 py-1.5 rounded-md text-xs font-medium transition-all ${
+                    sendMode === "device"
+                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                      : "text-gray-500 hover:text-gray-300"
+                  }`}
+                >
+                  My Devices
+                </button>
+                <button
+                  onClick={() => { setSendMode("friend"); setTargetDevice(""); }}
+                  className={`flex-1 py-1.5 rounded-md text-xs font-medium transition-all ${
+                    sendMode === "friend"
+                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                      : "text-gray-500 hover:text-gray-300"
+                  }`}
+                >
+                  <span className="flex items-center justify-center gap-1">
+                    <Users className="w-3 h-3" />
+                    To Friend
+                  </span>
+                </button>
+              </div>
+
+              {sendMode === "device" ? (
                 <div className="space-y-1.5">
-                  {otherDevices.map((d) => (
-                    <label
-                      key={d.device_id}
-                      className={`flex items-center justify-between rounded-md border px-4 py-2.5 cursor-pointer transition-colors ${
-                        targetDevice === d.device_id
-                          ? "border-emerald-500/30 bg-emerald-500/5"
-                          : "border-gray-800/40 bg-gray-800/30 hover:border-gray-700"
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="target-device"
-                        value={d.device_id}
-                        checked={targetDevice === d.device_id}
-                        onChange={(e) => setTargetDevice(e.target.value)}
-                        className="sr-only"
-                      />
-                      <div className="min-w-0">
-                        <p className="text-sm text-gray-200">{d.name}</p>
-                        {d.node_id && <p className="text-xs text-gray-600 font-mono">{d.node_id.slice(0, 16)}...</p>}
-                      </div>
-                      {targetDevice === d.device_id && (
-                        <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 ml-3" />
-                      )}
-                    </label>
-                  ))}
+                  <p className="text-xs text-gray-500 mb-2">Send to your device</p>
+                  {otherDevices.length > 0 ? (
+                    otherDevices.map((d) => (
+                      <label
+                        key={d.device_id}
+                        className={`flex items-center justify-between rounded-md border px-4 py-2.5 cursor-pointer transition-colors ${
+                          targetDevice === d.device_id
+                            ? "border-emerald-500/30 bg-emerald-500/5"
+                            : "border-gray-800/40 bg-gray-800/30 hover:border-gray-700"
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="target-device"
+                          value={d.device_id}
+                          checked={targetDevice === d.device_id}
+                          onChange={(e) => setTargetDevice(e.target.value)}
+                          className="sr-only"
+                        />
+                        <div className="min-w-0">
+                          <p className="text-sm text-gray-200">{d.name}</p>
+                          {d.node_id && <p className="text-xs text-gray-600 font-mono">{d.node_id.slice(0, 16)}...</p>}
+                        </div>
+                        {targetDevice === d.device_id && (
+                          <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 ml-3" />
+                        )}
+                      </label>
+                    ))
+                  ) : (
+                    <div className="text-center py-4 border border-gray-800/40 rounded-md">
+                      <p className="text-xs text-gray-600">No other approved devices found.</p>
+                    </div>
+                  )}
                 </div>
               ) : (
-                <div className="text-center py-4 border border-gray-800/40 rounded-md">
-                  <p className="text-xs text-gray-600">No other devices available. Pair another device first.</p>
+                <div className="space-y-3">
+                  {/* Step 1: Pick a friend */}
+                  <div>
+                    <p className="text-xs text-gray-500 mb-2">Select friend</p>
+                    {friends.length > 0 ? (
+                      <div className="space-y-1.5 max-h-32 overflow-y-auto">
+                        {friends.map((f) => (
+                          <label
+                            key={f.id}
+                            className={`flex items-center justify-between rounded-md border px-4 py-2 cursor-pointer transition-colors ${
+                              selectedFriend === f.user.user_id
+                                ? "border-emerald-500/30 bg-emerald-500/5"
+                                : "border-gray-800/40 bg-gray-800/30 hover:border-gray-700"
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name="friend"
+                              value={f.user.user_id}
+                              checked={selectedFriend === f.user.user_id}
+                              onChange={() => handleSelectFriend(f.user.user_id)}
+                              className="sr-only"
+                            />
+                            <p className="text-sm text-gray-200">{f.user.username}</p>
+                            {selectedFriend === f.user.user_id && (
+                              <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+                            )}
+                          </label>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-4 border border-gray-800/40 rounded-md">
+                        <p className="text-xs text-gray-600">No friends yet. Add friends first!</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Step 2: Pick friend's device */}
+                  {selectedFriend && friendDevices.length > 0 && (
+                    <div>
+                      <p className="text-xs text-gray-500 mb-2">Select device</p>
+                      <div className="space-y-1.5">
+                        {friendDevices.map((d) => (
+                          <label
+                            key={d.device_id}
+                            className={`flex items-center justify-between rounded-md border px-4 py-2 cursor-pointer transition-colors ${
+                              targetDevice === d.device_id
+                                ? "border-emerald-500/30 bg-emerald-500/5"
+                                : "border-gray-800/40 bg-gray-800/30 hover:border-gray-700"
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name="target-device"
+                              value={d.device_id}
+                              checked={targetDevice === d.device_id}
+                              onChange={(e) => setTargetDevice(e.target.value)}
+                              className="sr-only"
+                            />
+                            <div className="min-w-0">
+                              <p className="text-sm text-gray-200">{d.name}</p>
+                              {d.node_id && <p className="text-xs text-gray-600 font-mono">{d.node_id.slice(0, 16)}...</p>}
+                            </div>
+                            {targetDevice === d.device_id && (
+                              <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 ml-3" />
+                            )}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedFriend && friendDevices.length === 0 && (
+                    <p className="text-xs text-gray-600 text-center py-2">
+                      This friend has no active devices.
+                    </p>
+                  )}
+
+                  <p className="text-xs text-gray-600 flex items-center gap-1.5">
+                    <Lock className="w-3 h-3 text-emerald-500/60" />
+                    E2E encrypted &middot; Requires friend approval
+                  </p>
                 </div>
               )}
             </div>
-
-            <p className="text-xs text-gray-600">
-              Encryption keys are derived automatically via X25519 ECDH. No manual key sharing needed.
-            </p>
 
             <div className="flex gap-2 justify-end">
               <button onClick={() => setShowSend(false)} className="px-3 py-1.5 rounded-md text-sm text-gray-500 hover:text-gray-300 transition-colors">
