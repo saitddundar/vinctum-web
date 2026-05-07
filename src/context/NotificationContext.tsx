@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from "react";
+import { toast } from "sonner";
 import { useAuth } from "./AuthContext";
 import { getNotificationCount } from "../lib/friend-api";
 import type { NotificationCount } from "../types/friend";
@@ -17,11 +18,23 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     incoming_transfers: 0,
     total: 0,
   });
+  const prevFR = useRef<number | null>(null);
 
   const refresh = useCallback(async () => {
     if (!user) return;
     try {
       const data = await getNotificationCount();
+      // Toast when friend_requests increases (skip initial load)
+      if (prevFR.current !== null && data.friend_requests > prevFR.current) {
+        const diff = data.friend_requests - prevFR.current;
+        toast(`${diff} new friend request${diff > 1 ? "s" : ""}`, {
+          action: {
+            label: "View",
+            onClick: () => { window.location.href = "/friends?tab=requests"; },
+          },
+        });
+      }
+      prevFR.current = data.friend_requests;
       setCounts(data);
     } catch {
       // silent
