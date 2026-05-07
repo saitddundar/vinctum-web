@@ -14,36 +14,43 @@ Vinctum P2P platformunun React frontend'i. Go backend (vinctum-core) Gateway ser
 src/
   components/
     ErrorBoundary.tsx       # Global error boundary with fallback UI
-    Layout.tsx              # Sidebar layout (nav + user profile + logout)
+    Layout.tsx              # Sidebar layout (nav + user profile + logout + notification badge)
     ProtectedRoute.tsx      # Auth guard, redirects to /login
   context/
     AuthContext.tsx          # Global auth state, token interceptors
+    NotificationContext.tsx  # Notification polling (15s), toast on new friend requests
   lib/
     api.ts                  # Axios instance (baseURL: /api)
-    auth-api.ts             # Auth API functions (MOCK=true for dev)
-    device-api.ts           # Device/pairing/session API (MOCK=true for dev)
-    device-key.ts           # Device key generation and management
+    auth-api.ts             # Auth API functions
+    device-api.ts           # Device/pairing/session/friend-devices/visibility API
+    device-key.ts           # X25519 device key generation, ECDH key derivation
     fingerprint.ts          # Browser fingerprint + device type detection
-    mock-data.ts            # Mock nodes and anomalies for dashboard
-    transfer-api.ts         # Transfer API functions (MOCK=true for dev)
+    friend-api.ts           # Friend requests, search users, notifications count
+    ml-api.ts               # ML service API (node scoring, anomaly detection)
+    transfer-api.ts         # Transfer API (chunked upload/download, E2E encryption, NDJSON streams)
   pages/
-    Home.tsx                # Public landing page, auth-aware header (Sign in / Dashboard+Account)
+    Home.tsx                # Public landing page, auth-aware header
     Account.tsx             # Protected, own header, profile + settings + danger zone
     Login.tsx, Register.tsx  # Auth pages
     ForgotPassword.tsx      # Password reset request
     ResetPassword.tsx       # Password reset with token
     VerifyEmail.tsx, CheckEmail.tsx  # Email verification flow
     Dashboard.tsx           # Protected, sidebar layout, stats + devices + quick actions
-    Devices.tsx             # Device management + pairing flow
+    Devices.tsx             # Device management + pairing flow + public/private visibility toggle
     Sessions.tsx            # Peer session management
-    Transfers.tsx           # E2E encrypted file transfers with upload progress
+    Transfers.tsx           # E2E encrypted file transfers (device/session/friend send modes)
+    Friends.tsx             # Friend list, pending requests, user search
+    Incoming.tsx            # Incoming file receive with progress tracking
+    Notifications.tsx       # Notification feed (friend requests), links to Friends page
+    Anomalies.tsx           # Network page with metrics and security scan
     NotFound.tsx            # 404 page
   types/
     api.ts                  # ML API types (NodeMetrics, ScoreResponse, etc.)
     auth.ts                 # Auth types (User, LoginRequest, etc.)
-    device.ts               # Device types (Device, PeerSession, PairingCode, etc.)
-    transfer.ts             # Transfer types (TransferFile, TransferSession, etc.)
-  App.tsx                   # Routes + AuthProvider + ErrorBoundary + Sonner
+    device.ts               # Device types (Device, PeerSession, Friend, etc.)
+    friend.ts               # Friend types (Friend, UserInfo, NotificationCount)
+    transfer.ts             # Transfer types (TransferInfo, TransferStatus, etc.)
+  App.tsx                   # Routes + AuthProvider + NotificationProvider + ErrorBoundary + Sonner
   main.tsx                  # Entry point
   index.css                 # Tailwind import
 ```
@@ -63,12 +70,15 @@ npm run lint
 
 ## Conventions
 
-- Two layout modes: Home/Account have own header (no sidebar), Dashboard/Devices/Sessions/Transfers use sidebar Layout
-- Dark theme: bg-gray-950 base, gray-900 cards, gray-800 borders
-- MOCK flag in auth-api.ts and device-api.ts: set to true for frontend-only dev
-- Mock login: test@vinctum.app / 12345678
+- Two layout modes: Home/Account have own header (no sidebar), all other protected pages use sidebar Layout
+- Dark theme: oklch-based CSS variables (--bg, --fg, --accent, --line, --muted, --amber, --red)
+- Glass card styles: glass-card, glass-card-static, drop-zone
+- Inline styles preferred over tailwind classes for consistency
 - Vite proxy: /api -> http://localhost:8080 (Gateway)
-- Status badges: emerald=good, yellow=warning, red=critical/bad
+- Status badges: emerald/accent=good, amber=warning, red=critical
 - All API calls go through /api prefix (proxied to Gateway)
 - Auth tokens stored in localStorage (vinctum_access_token, vinctum_refresh_token, vinctum_user)
 - Axios interceptors auto-attach Bearer token and handle 401 refresh
+- Device visibility: public (friends can see and send files) / private (only owner)
+- Transfer send modes: Device (own devices), Session (all devices in session), Friend (friend's public devices)
+- Notification polling every 15s, toast notification on new friend requests with "View" action
