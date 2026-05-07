@@ -15,6 +15,7 @@ import Devices from "./pages/Devices";
 import Sessions from "./pages/Sessions";
 import Transfers from "./pages/Transfers";
 import Friends from "./pages/Friends";
+import Notifications from "./pages/Notifications";
 import Incoming from "./pages/Incoming";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
@@ -55,6 +56,7 @@ export default function App() {
                 <Route path="/sessions" element={<Sessions />} />
                 <Route path="/transfers" element={<Transfers />} />
                 <Route path="/friends" element={<Friends />} />
+                <Route path="/notifications" element={<Notifications />} />
                 <Route path="/incoming" element={<Incoming />} />
                 <Route path="/network" element={<Anomalies />} />
               </Route>

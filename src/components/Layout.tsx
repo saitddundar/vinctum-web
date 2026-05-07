@@ -158,7 +158,7 @@ export default function Layout() {
 
           {/* Notifications */}
           <div style={{ position: "relative" }}>
-            <button onClick={() => navigate("/friends?tab=requests")} style={{
+            <button onClick={() => navigate("/notifications")} style={{
               width: 32, height: 32, borderRadius: 9, border: "1px solid var(--line)",
               display: "flex", alignItems: "center", justifyContent: "center",
               background: "none", cursor: "pointer", color: "var(--muted)",

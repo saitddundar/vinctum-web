@@ -30,7 +30,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         toast(`${diff} new friend request${diff > 1 ? "s" : ""}`, {
           action: {
             label: "View",
-            onClick: () => { window.location.href = "/friends?tab=requests"; },
+            onClick: () => { window.location.href = "/notifications"; },
           },
         });
       }
