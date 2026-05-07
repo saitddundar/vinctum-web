@@ -1,9 +1,9 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { toast } from "sonner";
-import { FileUp, Upload, Lock, ShieldCheck, CircleDot, Check, X } from "lucide-react";
-import type { Device } from "../types/device";
+import { FileUp, Upload, Lock, ShieldCheck, CircleDot, Check, X, Users } from "lucide-react";
+import type { Device, PeerSession } from "../types/device";
 import type { TransferInfo, TransferStatus } from "../types/transfer";
-import { listDevices } from "../lib/device-api";
+import { listDevices, listPeerSessions } from "../lib/device-api";
 import { initiateTransfer, listTransfers, cancelTransfer, getTransferStatus, uploadFile, downloadFile } from "../lib/transfer-api";
 import { ensureDeviceKeys, getRemoteDeviceKey, generateEphemeralKeyPair, deriveTransferKey, deriveReceiverKey } from "../lib/device-key";
 
@@ -43,6 +43,7 @@ const STATUS_COLOR: Record<TransferStatus, string> = {
 };
 
 type FilterStatus = "all" | "active" | "completed" | "failed";
+type SendMode = "device" | "session";
 type PipelineStep = "prepare" | "encrypt" | "upload" | "verify" | "complete";
 const PIPELINE_ORDER: PipelineStep[] = ["prepare","encrypt","upload","verify","complete"];
 const PIPELINE_ICONS: Record<PipelineStep, React.ReactNode> = {
@@ -55,12 +56,15 @@ const PIPELINE_ICONS: Record<PipelineStep, React.ReactNode> = {
 
 export default function Transfers() {
   const [devices,        setDevices]        = useState<Device[]>([]);
+  const [sessions,       setSessions]       = useState<PeerSession[]>([]);
   const [transfers,      setTransfers]      = useState<TransferInfo[]>([]);
   const [loading,        setLoading]        = useState(true);
   const [filter,         setFilter]         = useState<FilterStatus>("all");
   const [showSend,       setShowSend]       = useState(false);
   const [selectedFile,   setSelectedFile]   = useState<File | null>(null);
+  const [sendMode,       setSendMode]       = useState<SendMode>("device");
   const [targetDevice,   setTargetDevice]   = useState("");
+  const [targetSession,  setTargetSession]  = useState("");
   const [sending,        setSending]        = useState(false);
   const [pipelineStep,   setPipelineStep]   = useState<PipelineStep>("prepare");
   const [uploadProgress, setUploadProgress] = useState<{ sent: number; total: number } | null>(null);
@@ -71,9 +75,10 @@ export default function Transfers() {
 
   const fetchData = useCallback(async () => {
     try {
-      const dR = await listDevices();
+      const [dR, sR] = await Promise.all([listDevices(), listPeerSessions()]);
       const approved = dR.devices.filter((d: Device) => d.is_approved && !d.is_revoked);
       setDevices(approved);
+      setSessions(sR.sessions.filter((s: PeerSession) => s.is_active));
       const first = approved.find((d: Device) => d.node_id);
       if (first) {
         try { await ensureDeviceKeys(first.device_id); } catch {}
@@ -103,30 +108,49 @@ export default function Transfers() {
     return () => clearInterval(iv);
   }, [transfers.map(t => t.transfer_id + t.status).join(",")]);
 
+  async function sendToDevice(file: File, targetDev: Device) {
+    if (!myDevice?.node_id || !targetDev.node_id) throw new Error("Target device has no node ID");
+    const buf = await file.arrayBuffer();
+    const hashBuf = await crypto.subtle.digest("SHA-256", buf);
+    const contentHash = Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2,"0")).join("");
+    const receiverPub = await getRemoteDeviceKey(targetDev.device_id);
+    const ephemeral = await generateEphemeralKeyPair();
+    const ephPubB64 = btoa(String.fromCharCode(...ephemeral.publicKeyBytes));
+    const tx = await initiateTransfer({ sender_node_id: myDevice.node_id, receiver_node_id: targetDev.node_id, filename: file.name, total_size_bytes: file.size, content_hash: contentHash, chunk_size_bytes: 262144, sender_ephemeral_pubkey: ephPubB64 });
+    const aesKey = await deriveTransferKey(ephemeral.privateKey, receiverPub, ephemeral.publicKeyBytes, receiverPub, tx.transfer_id);
+    return { tx, aesKey };
+  }
+
   async function handleSend() {
-    if (!selectedFile || !targetDevice || !myDevice?.node_id) return;
+    if (!selectedFile || !myDevice?.node_id) return;
+    const targets: Device[] = [];
+    if (sendMode === "device") {
+      if (!targetDevice) return;
+      const t = devices.find(d => d.device_id === targetDevice);
+      if (t) targets.push(t);
+    } else {
+      const session = sessions.find(s => s.session_id === targetSession);
+      if (!session) return;
+      targets.push(...session.devices.filter(d => d.device_id !== myDevice?.device_id && d.node_id));
+      if (!targets.length) { toast.error("No other devices in this session"); return; }
+    }
     setSending(true); setUploadProgress(null);
     try {
       setPipelineStep("encrypt");
-      const buf = await selectedFile.arrayBuffer();
-      const hashBuf = await crypto.subtle.digest("SHA-256", buf);
-      const contentHash = Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2,"0")).join("");
-      const target = devices.find(d => d.device_id === targetDevice);
-      if (!target?.node_id) throw new Error("Target device has no node ID");
-      const receiverPub = await getRemoteDeviceKey(target.device_id);
-      const ephemeral = await generateEphemeralKeyPair();
-      const ephPubB64 = btoa(String.fromCharCode(...ephemeral.publicKeyBytes));
-      const tx = await initiateTransfer({ sender_node_id: myDevice.node_id, receiver_node_id: target.node_id, filename: selectedFile.name, total_size_bytes: selectedFile.size, content_hash: contentHash, chunk_size_bytes: 262144, sender_ephemeral_pubkey: ephPubB64 });
-      const aesKey = await deriveTransferKey(ephemeral.privateKey, receiverPub, ephemeral.publicKeyBytes, receiverPub, tx.transfer_id);
+      const sessionLabel = sendMode === "session" ? sessions.find(s => s.session_id === targetSession)?.name : null;
       setShowSend(false);
-      setPipelineStep("upload");
-      setUploadProgress({ sent: 0, total: tx.total_chunks });
-      uploadStartRef.current = Date.now();
-      await uploadFile(tx.transfer_id, selectedFile, aesKey, (sent, total) => setUploadProgress({ sent, total }));
-      setPipelineStep("verify");
+      for (let i = 0; i < targets.length; i++) {
+        const target = targets[i];
+        const { tx, aesKey } = await sendToDevice(selectedFile, target);
+        setPipelineStep("upload");
+        setUploadProgress({ sent: 0, total: tx.total_chunks });
+        uploadStartRef.current = Date.now();
+        await uploadFile(tx.transfer_id, selectedFile, aesKey, (sent, total) => setUploadProgress({ sent, total }));
+        setPipelineStep("verify");
+      }
       setPipelineStep("complete");
-      setUploadProgress(null); setSelectedFile(null); setTargetDevice("");
-      toast.success("File sent successfully");
+      setUploadProgress(null); setSelectedFile(null); setTargetDevice(""); setTargetSession("");
+      toast.success(targets.length > 1 ? `File sent to ${targets.length} devices${sessionLabel ? ` in ${sessionLabel}` : ""}` : "File sent successfully");
       await fetchData();
     } catch (e: any) { toast.error(e?.response?.data?.error || e.message || "Failed to send file"); setUploadProgress(null); }
     finally { setSending(false); setPipelineStep("prepare"); }
@@ -337,29 +361,63 @@ export default function Transfers() {
             </div>
             <div style={{ marginBottom: 18 }}>
               <p style={{ fontSize: 11, color: "var(--muted-2)", textTransform: "uppercase", letterSpacing: ".08em", fontWeight: 600, marginBottom: 8 }}>Send to</p>
-              {otherDevices.length > 0 ? (
-                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  {otherDevices.map(d => (
-                    <label key={d.device_id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderRadius: 9, border: `1px solid ${targetDevice === d.device_id ? "oklch(0.78 0.15 160 / .35)" : "var(--line)"}`, background: targetDevice === d.device_id ? "oklch(0.78 0.15 160 / .05)" : "oklch(1 0 0 / .015)", cursor: "pointer" }}>
-                      <input type="radio" name="target" value={d.device_id} checked={targetDevice === d.device_id} onChange={e => setTargetDevice(e.target.value)} style={{ display: "none" }} />
-                      <div>
-                        <div style={{ fontSize: 13, color: "var(--fg)" }}>{d.name}</div>
-                        {d.node_id && <div className="font-mono" style={{ fontSize: 10, color: "var(--muted-2)", marginTop: 2 }}>{d.node_id.slice(0, 16)}…</div>}
-                      </div>
-                      {targetDevice === d.device_id && <span style={{ width: 7, height: 7, borderRadius: 99, background: "var(--accent)" }} />}
-                    </label>
-                  ))}
-                </div>
+              <div className="flex" style={{ marginBottom: 10, borderBottom: "1px solid var(--line)" }}>
+                {(["device", "session"] as SendMode[]).map(m => (
+                  <button key={m} onClick={() => { setSendMode(m); setTargetDevice(""); setTargetSession(""); }} style={{ padding: "6px 14px", fontSize: 12, border: "none", borderBottom: sendMode === m ? "2px solid var(--accent)" : "2px solid transparent", background: "none", color: sendMode === m ? "var(--accent)" : "var(--muted)", cursor: "pointer", fontFamily: "Inter", display: "flex", alignItems: "center", gap: 5 }}>
+                    {m === "session" && <Users size={11} />}
+                    {m === "device" ? "Device" : "Session"}
+                  </button>
+                ))}
+              </div>
+              {sendMode === "device" ? (
+                otherDevices.length > 0 ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {otherDevices.map(d => (
+                      <label key={d.device_id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderRadius: 9, border: `1px solid ${targetDevice === d.device_id ? "oklch(0.78 0.15 160 / .35)" : "var(--line)"}`, background: targetDevice === d.device_id ? "oklch(0.78 0.15 160 / .05)" : "oklch(1 0 0 / .015)", cursor: "pointer" }}>
+                        <input type="radio" name="target" value={d.device_id} checked={targetDevice === d.device_id} onChange={e => setTargetDevice(e.target.value)} style={{ display: "none" }} />
+                        <div>
+                          <div style={{ fontSize: 13, color: "var(--fg)" }}>{d.name}</div>
+                          {d.node_id && <div className="font-mono" style={{ fontSize: 10, color: "var(--muted-2)", marginTop: 2 }}>{d.node_id.slice(0, 16)}…</div>}
+                        </div>
+                        {targetDevice === d.device_id && <span style={{ width: 7, height: 7, borderRadius: 99, background: "var(--accent)" }} />}
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ padding: "14px 16px", border: "1px solid var(--line)", borderRadius: 9, textAlign: "center" }}>
+                    <p style={{ fontSize: 12.5, color: "var(--muted)", margin: 0 }}>No other devices available. Pair another device first.</p>
+                  </div>
+                )
               ) : (
-                <div style={{ padding: "14px 16px", border: "1px solid var(--line)", borderRadius: 9, textAlign: "center" }}>
-                  <p style={{ fontSize: 12.5, color: "var(--muted)", margin: 0 }}>No other devices available. Pair another device first.</p>
-                </div>
+                sessions.length > 0 ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {sessions.map(s => {
+                      const recipients = s.devices.filter(d => d.device_id !== myDevice?.device_id);
+                      return (
+                        <label key={s.session_id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderRadius: 9, border: `1px solid ${targetSession === s.session_id ? "oklch(0.78 0.15 160 / .35)" : "var(--line)"}`, background: targetSession === s.session_id ? "oklch(0.78 0.15 160 / .05)" : "oklch(1 0 0 / .015)", cursor: "pointer" }}>
+                          <input type="radio" name="target-session" value={s.session_id} checked={targetSession === s.session_id} onChange={e => setTargetSession(e.target.value)} style={{ display: "none" }} />
+                          <div>
+                            <div style={{ fontSize: 13, color: "var(--fg)" }}>{s.name}</div>
+                            <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>
+                              {recipients.length} recipient{recipients.length !== 1 ? "s" : ""}: {recipients.map(d => d.name).join(", ")}
+                            </div>
+                          </div>
+                          {targetSession === s.session_id && <span style={{ width: 7, height: 7, borderRadius: 99, background: "var(--accent)" }} />}
+                        </label>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div style={{ padding: "14px 16px", border: "1px solid var(--line)", borderRadius: 9, textAlign: "center" }}>
+                    <p style={{ fontSize: 12.5, color: "var(--muted)", margin: 0 }}>No active sessions. Create a session first.</p>
+                  </div>
+                )
               )}
             </div>
             <p style={{ fontSize: 11.5, color: "var(--muted-2)", marginBottom: 18 }}>Keys derived via X25519 ECDH automatically. No manual sharing needed.</p>
             <div className="flex gap-2 justify-end">
               <button onClick={() => setShowSend(false)} className="btn btn-ghost" style={{ fontSize: 12.5 }}>Cancel</button>
-              <button onClick={handleSend} disabled={!selectedFile || !targetDevice || sending} className="btn btn-primary" style={{ fontSize: 12.5 }}>{sending ? "Processing…" : "Send"}</button>
+              <button onClick={handleSend} disabled={!selectedFile || (sendMode === "device" ? !targetDevice : !targetSession) || sending} className="btn btn-primary" style={{ fontSize: 12.5 }}>{sending ? "Processing…" : "Send"}</button>
             </div>
           </div>
         </div>
