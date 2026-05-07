@@ -74,6 +74,11 @@ export async function leavePeerSession(sessionId: string, deviceId: string): Pro
   return data;
 }
 
+export async function updateDeviceVisibility(deviceId: string, isPublic: boolean): Promise<{ success: boolean }> {
+  const { data } = await api.put(`/v1/devices/${deviceId}/visibility`, { is_public: isPublic });
+  return data;
+}
+
 export async function listFriends(): Promise<{ friends: Friend[] }> {
   const { data } = await api.get("/v1/friends");
   return data;

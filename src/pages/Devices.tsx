@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import { Monitor, Smartphone, Tablet, QrCode, MonitorSmartphone } from "lucide-react";
 import type { Device } from "../types/device";
 import { normalizeDeviceType, toProtoDeviceType } from "../types/device";
-import { listDevices, registerDevice, revokeDevice, generatePairingCode, redeemPairingCode, approvePairing } from "../lib/device-api";
+import { listDevices, registerDevice, revokeDevice, generatePairingCode, redeemPairingCode, approvePairing, updateDeviceVisibility } from "../lib/device-api";
 import { getDeviceFingerprint, guessDeviceType } from "../lib/fingerprint";
 import { ensureDeviceKeys } from "../lib/device-key";
 
@@ -206,7 +206,6 @@ export default function Devices() {
               {[
                 ["Type",        normalizeDeviceType(selected.device_type as any)],
                 ["Status",      selected.is_approved ? "Approved" : "Pending"],
-                ["Visibility",  selected.is_public ? "Public" : "Private"],
                 ["Last active", timeAgo(selected.last_active)],
               ].map(([l, v]) => (
                 <div key={l} className="flex justify-between text-xs">
@@ -214,6 +213,23 @@ export default function Devices() {
                   <span style={{ fontSize: 12, color: "var(--fg)" }}>{v}</span>
                 </div>
               ))}
+              <div className="flex justify-between items-center">
+                <span style={{ fontSize: 12, color: "var(--muted)" }}>Visibility</span>
+                <button
+                  onClick={async () => {
+                    const next = !selected.is_public;
+                    try {
+                      await updateDeviceVisibility(selected.device_id, next);
+                      setSelected({ ...selected, is_public: next });
+                      setDevices(prev => prev.map(d => d.device_id === selected.device_id ? { ...d, is_public: next } : d));
+                      toast.success(next ? "Device is now public" : "Device is now private");
+                    } catch { toast.error("Failed to update visibility"); }
+                  }}
+                  style={{ padding: "3px 10px", borderRadius: 6, border: "none", fontSize: 11.5, cursor: "pointer", background: selected.is_public ? "oklch(0.78 0.15 160 / .12)" : "oklch(1 0 0 / .06)", color: selected.is_public ? "var(--accent)" : "var(--muted)" }}
+                >
+                  {selected.is_public ? "Public" : "Private"}
+                </button>
+              </div>
               {selected.node_id && (
                 <div>
                   <div style={{ fontSize: 11, color: "var(--muted-2)", marginBottom: 4 }}>Node ID</div>
