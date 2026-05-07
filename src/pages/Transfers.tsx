@@ -1,9 +1,9 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { toast } from "sonner";
-import { FileUp, Upload, Lock, ShieldCheck, CircleDot, Check, X, Users } from "lucide-react";
-import type { Device, PeerSession } from "../types/device";
+import { FileUp, Upload, Lock, ShieldCheck, CircleDot, Check, X, Users, UserPlus } from "lucide-react";
+import type { Device, PeerSession, Friend } from "../types/device";
 import type { TransferInfo, TransferStatus } from "../types/transfer";
-import { listDevices, listPeerSessions } from "../lib/device-api";
+import { listDevices, listPeerSessions, listFriends, getFriendDevices } from "../lib/device-api";
 import { initiateTransfer, listTransfers, cancelTransfer, getTransferStatus, uploadFile, downloadFile } from "../lib/transfer-api";
 import { ensureDeviceKeys, getRemoteDeviceKey, generateEphemeralKeyPair, deriveTransferKey, deriveReceiverKey } from "../lib/device-key";
 
@@ -43,7 +43,7 @@ const STATUS_COLOR: Record<TransferStatus, string> = {
 };
 
 type FilterStatus = "all" | "active" | "completed" | "failed";
-type SendMode = "device" | "session";
+type SendMode = "device" | "session" | "friend";
 type PipelineStep = "prepare" | "encrypt" | "upload" | "verify" | "complete";
 const PIPELINE_ORDER: PipelineStep[] = ["prepare","encrypt","upload","verify","complete"];
 const PIPELINE_ICONS: Record<PipelineStep, React.ReactNode> = {
@@ -57,6 +57,8 @@ const PIPELINE_ICONS: Record<PipelineStep, React.ReactNode> = {
 export default function Transfers() {
   const [devices,        setDevices]        = useState<Device[]>([]);
   const [sessions,       setSessions]       = useState<PeerSession[]>([]);
+  const [friends,        setFriends]        = useState<Friend[]>([]);
+  const [friendDevices,  setFriendDevices]  = useState<Device[]>([]);
   const [transfers,      setTransfers]      = useState<TransferInfo[]>([]);
   const [loading,        setLoading]        = useState(true);
   const [filter,         setFilter]         = useState<FilterStatus>("all");
@@ -65,6 +67,9 @@ export default function Transfers() {
   const [sendMode,       setSendMode]       = useState<SendMode>("device");
   const [targetDevice,   setTargetDevice]   = useState("");
   const [targetSession,  setTargetSession]  = useState("");
+  const [selectedFriend, setSelectedFriend] = useState("");
+  const [targetFriendDevice, setTargetFriendDevice] = useState("");
+  const [loadingFriendDevices, setLoadingFriendDevices] = useState(false);
   const [sending,        setSending]        = useState(false);
   const [pipelineStep,   setPipelineStep]   = useState<PipelineStep>("prepare");
   const [uploadProgress, setUploadProgress] = useState<{ sent: number; total: number } | null>(null);
@@ -75,10 +80,11 @@ export default function Transfers() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [dR, sR] = await Promise.all([listDevices(), listPeerSessions()]);
+      const [dR, sR, fR] = await Promise.all([listDevices(), listPeerSessions(), listFriends()]);
       const approved = dR.devices.filter((d: Device) => d.is_approved && !d.is_revoked);
       setDevices(approved);
       setSessions(sR.sessions.filter((s: PeerSession) => s.is_active));
+      setFriends(fR.friends || []);
       const first = approved.find((d: Device) => d.node_id);
       if (first) {
         try { await ensureDeviceKeys(first.device_id); } catch {}
@@ -108,6 +114,19 @@ export default function Transfers() {
     return () => clearInterval(iv);
   }, [transfers.map(t => t.transfer_id + t.status).join(",")]);
 
+  async function handleFriendSelect(userId: string) {
+    setSelectedFriend(userId);
+    setTargetFriendDevice("");
+    setFriendDevices([]);
+    if (!userId) return;
+    setLoadingFriendDevices(true);
+    try {
+      const r = await getFriendDevices(userId);
+      setFriendDevices((r.devices || []).filter(d => d.is_approved && !d.is_revoked && d.node_id));
+    } catch { toast.error("Failed to load friend's devices"); }
+    finally { setLoadingFriendDevices(false); }
+  }
+
   async function sendToDevice(file: File, targetDev: Device) {
     if (!myDevice?.node_id || !targetDev.node_id) throw new Error("Target device has no node ID");
     const buf = await file.arrayBuffer();
@@ -128,11 +147,15 @@ export default function Transfers() {
       if (!targetDevice) return;
       const t = devices.find(d => d.device_id === targetDevice);
       if (t) targets.push(t);
-    } else {
+    } else if (sendMode === "session") {
       const session = sessions.find(s => s.session_id === targetSession);
       if (!session) return;
       targets.push(...session.devices.filter(d => d.device_id !== myDevice?.device_id && d.node_id));
       if (!targets.length) { toast.error("No other devices in this session"); return; }
+    } else {
+      if (!targetFriendDevice) return;
+      const t = friendDevices.find(d => d.device_id === targetFriendDevice);
+      if (t) targets.push(t);
     }
     setSending(true); setUploadProgress(null);
     try {
@@ -149,7 +172,7 @@ export default function Transfers() {
         setPipelineStep("verify");
       }
       setPipelineStep("complete");
-      setUploadProgress(null); setSelectedFile(null); setTargetDevice(""); setTargetSession("");
+      setUploadProgress(null); setSelectedFile(null); setTargetDevice(""); setTargetSession(""); setSelectedFriend(""); setTargetFriendDevice(""); setFriendDevices([]);
       toast.success(targets.length > 1 ? `File sent to ${targets.length} devices${sessionLabel ? ` in ${sessionLabel}` : ""}` : "File sent successfully");
       await fetchData();
     } catch (e: any) { toast.error(e?.response?.data?.error || e.message || "Failed to send file"); setUploadProgress(null); }
@@ -362,14 +385,17 @@ export default function Transfers() {
             <div style={{ marginBottom: 18 }}>
               <p style={{ fontSize: 11, color: "var(--muted-2)", textTransform: "uppercase", letterSpacing: ".08em", fontWeight: 600, marginBottom: 8 }}>Send to</p>
               <div className="flex" style={{ marginBottom: 10, borderBottom: "1px solid var(--line)" }}>
-                {(["device", "session"] as SendMode[]).map(m => (
-                  <button key={m} onClick={() => { setSendMode(m); setTargetDevice(""); setTargetSession(""); }} style={{ padding: "6px 14px", fontSize: 12, border: "none", borderBottom: sendMode === m ? "2px solid var(--accent)" : "2px solid transparent", background: "none", color: sendMode === m ? "var(--accent)" : "var(--muted)", cursor: "pointer", fontFamily: "Inter", display: "flex", alignItems: "center", gap: 5 }}>
+                {(["device", "session", "friend"] as SendMode[]).map(m => (
+                  <button key={m} onClick={() => { setSendMode(m); setTargetDevice(""); setTargetSession(""); setSelectedFriend(""); setTargetFriendDevice(""); setFriendDevices([]); }} style={{ padding: "6px 14px", fontSize: 12, border: "none", borderBottom: sendMode === m ? "2px solid var(--accent)" : "2px solid transparent", background: "none", color: sendMode === m ? "var(--accent)" : "var(--muted)", cursor: "pointer", fontFamily: "Inter", display: "flex", alignItems: "center", gap: 5 }}>
                     {m === "session" && <Users size={11} />}
-                    {m === "device" ? "Device" : "Session"}
+                    {m === "friend" && <UserPlus size={11} />}
+                    {m === "device" ? "Device" : m === "session" ? "Session" : "Friend"}
                   </button>
                 ))}
               </div>
-              {sendMode === "device" ? (
+
+              {/* Device tab */}
+              {sendMode === "device" && (
                 otherDevices.length > 0 ? (
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     {otherDevices.map(d => (
@@ -388,7 +414,10 @@ export default function Transfers() {
                     <p style={{ fontSize: 12.5, color: "var(--muted)", margin: 0 }}>No other devices available. Pair another device first.</p>
                   </div>
                 )
-              ) : (
+              )}
+
+              {/* Session tab */}
+              {sendMode === "session" && (
                 sessions.length > 0 ? (
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     {sessions.map(s => {
@@ -413,11 +442,59 @@ export default function Transfers() {
                   </div>
                 )
               )}
+
+              {/* Friend tab */}
+              {sendMode === "friend" && (
+                friends.length > 0 ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      {friends.map(f => (
+                        <label key={f.user_id} onClick={() => handleFriendSelect(f.user_id)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderRadius: 9, border: `1px solid ${selectedFriend === f.user_id ? "oklch(0.78 0.15 160 / .35)" : "var(--line)"}`, background: selectedFriend === f.user_id ? "oklch(0.78 0.15 160 / .05)" : "oklch(1 0 0 / .015)", cursor: "pointer" }}>
+                          <div>
+                            <div style={{ fontSize: 13, color: "var(--fg)" }}>{f.display_name || f.username}</div>
+                            <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>@{f.username}</div>
+                          </div>
+                          {selectedFriend === f.user_id && <span style={{ width: 7, height: 7, borderRadius: 99, background: "var(--accent)" }} />}
+                        </label>
+                      ))}
+                    </div>
+                    {selectedFriend && (
+                      <div style={{ marginTop: 4 }}>
+                        <p style={{ fontSize: 11, color: "var(--muted-2)", textTransform: "uppercase", letterSpacing: ".08em", fontWeight: 600, marginBottom: 6 }}>Their public devices</p>
+                        {loadingFriendDevices ? (
+                          <div className="glass-card-static animate-pulse" style={{ height: 42 }} />
+                        ) : friendDevices.length > 0 ? (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                            {friendDevices.map(d => (
+                              <label key={d.device_id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 12px", borderRadius: 8, border: `1px solid ${targetFriendDevice === d.device_id ? "oklch(0.78 0.15 160 / .35)" : "var(--line)"}`, background: targetFriendDevice === d.device_id ? "oklch(0.78 0.15 160 / .05)" : "oklch(1 0 0 / .015)", cursor: "pointer" }}>
+                                <input type="radio" name="target-friend-device" value={d.device_id} checked={targetFriendDevice === d.device_id} onChange={e => setTargetFriendDevice(e.target.value)} style={{ display: "none" }} />
+                                <div>
+                                  <div style={{ fontSize: 12.5, color: "var(--fg)" }}>{d.name}</div>
+                                  {d.node_id && <div className="font-mono" style={{ fontSize: 10, color: "var(--muted-2)", marginTop: 2 }}>{d.node_id.slice(0, 16)}…</div>}
+                                </div>
+                                {targetFriendDevice === d.device_id && <span style={{ width: 6, height: 6, borderRadius: 99, background: "var(--accent)" }} />}
+                              </label>
+                            ))}
+                          </div>
+                        ) : (
+                          <div style={{ padding: "12px 14px", border: "1px solid var(--line)", borderRadius: 8, textAlign: "center" }}>
+                            <p style={{ fontSize: 12, color: "var(--muted)", margin: 0 }}>No public devices available for this friend.</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ padding: "14px 16px", border: "1px solid var(--line)", borderRadius: 9, textAlign: "center" }}>
+                    <p style={{ fontSize: 12.5, color: "var(--muted)", margin: 0 }}>No friends added yet.</p>
+                  </div>
+                )
+              )}
             </div>
             <p style={{ fontSize: 11.5, color: "var(--muted-2)", marginBottom: 18 }}>Keys derived via X25519 ECDH automatically. No manual sharing needed.</p>
             <div className="flex gap-2 justify-end">
               <button onClick={() => setShowSend(false)} className="btn btn-ghost" style={{ fontSize: 12.5 }}>Cancel</button>
-              <button onClick={handleSend} disabled={!selectedFile || (sendMode === "device" ? !targetDevice : !targetSession) || sending} className="btn btn-primary" style={{ fontSize: 12.5 }}>{sending ? "Processing…" : "Send"}</button>
+              <button onClick={handleSend} disabled={!selectedFile || (sendMode === "device" ? !targetDevice : sendMode === "session" ? !targetSession : !targetFriendDevice) || sending} className="btn btn-primary" style={{ fontSize: 12.5 }}>{sending ? "Processing…" : "Send"}</button>
             </div>
           </div>
         </div>

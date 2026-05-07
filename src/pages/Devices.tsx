@@ -33,6 +33,7 @@ export default function Devices() {
   const [pairingCode, setPairingCode] = useState("");
   const [pairingExp,  setPairingExp]  = useState(0);
   const [addName,     setAddName]     = useState("");
+  const [addPublic,   setAddPublic]   = useState(false);
   const [redeemCode,  setRedeemCode]  = useState("");
   const [redeemName,  setRedeemName]  = useState("");
   const [actionLoading, setActionLoading] = useState(false);
@@ -60,9 +61,9 @@ export default function Devices() {
     setActionLoading(true);
     try {
       const fp = await getDeviceFingerprint();
-      const r = await registerDevice({ name: addName, device_type: toProtoDeviceType(guessDeviceType()), fingerprint: fp });
+      const r = await registerDevice({ name: addName, device_type: toProtoDeviceType(guessDeviceType()), fingerprint: fp, is_public: addPublic });
       try { await ensureDeviceKeys(r.device.device_id); } catch {}
-      await fetch(); setModal(null); setAddName("");
+      await fetch(); setModal(null); setAddName(""); setAddPublic(false);
       toast.success("Device registered");
     } catch { toast.error("Failed to add device"); }
     finally { setActionLoading(false); }
@@ -205,6 +206,7 @@ export default function Devices() {
               {[
                 ["Type",        normalizeDeviceType(selected.device_type as any)],
                 ["Status",      selected.is_approved ? "Approved" : "Pending"],
+                ["Visibility",  selected.is_public ? "Public" : "Private"],
                 ["Last active", timeAgo(selected.last_active)],
               ].map(([l, v]) => (
                 <div key={l} className="flex justify-between text-xs">
@@ -239,7 +241,29 @@ export default function Devices() {
                 <h2 style={{ fontSize: 16, fontWeight: 500, margin: 0 }}>Register this device</h2>
                 <p style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 5 }}>Register the current browser as a device.</p>
               </div>
-              <input type="text" placeholder="Device name" value={addName} onChange={e => setAddName(e.target.value)} className="vt-input" autoFocus style={{ marginBottom: 18 }} />
+              <input type="text" placeholder="Device name" value={addName} onChange={e => setAddName(e.target.value)} className="vt-input" autoFocus style={{ marginBottom: 16 }} />
+              <div style={{ marginBottom: 18 }}>
+                <p style={{ fontSize: 11, color: "var(--muted-2)", textTransform: "uppercase", letterSpacing: ".08em", fontWeight: 600, marginBottom: 10 }}>Visibility</p>
+                <div style={{ display: "flex", gap: 8 }}>
+                  {([false, true] as const).map(pub => (
+                    <label key={String(pub)} style={{ flex: 1, padding: "10px 14px", borderRadius: 9, border: `1px solid ${addPublic === pub ? "oklch(0.78 0.15 160 / .35)" : "var(--line)"}`, background: addPublic === pub ? "oklch(0.78 0.15 160 / .05)" : "oklch(1 0 0 / .015)", cursor: "pointer", textAlign: "center" }}>
+                      <input type="radio" name="visibility" checked={addPublic === pub} onChange={() => setAddPublic(pub)} style={{ display: "none" }} />
+                      <div style={{ fontSize: 13, color: addPublic === pub ? "var(--accent)" : "var(--fg)", fontWeight: 500 }}>{pub ? "Public" : "Private"}</div>
+                    </label>
+                  ))}
+                </div>
+                <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 8, background: "oklch(0.78 0.15 160 / .04)", border: "1px solid oklch(0.78 0.15 160 / .1)" }}>
+                  {addPublic ? (
+                    <p style={{ fontSize: 12, color: "var(--fg-2)", margin: 0, lineHeight: 1.55 }}>
+                      Friends you've added can see this device and send you files directly. Strangers and unapproved users still can't access it — only your friend list.
+                    </p>
+                  ) : (
+                    <p style={{ fontSize: 12, color: "var(--fg-2)", margin: 0, lineHeight: 1.55 }}>
+                      Only you can see this device. It won't appear in anyone else's device list. You can still send files between your own devices.
+                    </p>
+                  )}
+                </div>
+              </div>
               <div className="flex gap-2 justify-end">
                 <button onClick={() => setModal(null)} className="btn btn-ghost" style={{ fontSize: 12.5 }}>Cancel</button>
                 <button onClick={handleAddThis} disabled={!addName || actionLoading} className="btn btn-primary" style={{ fontSize: 12.5 }}>{actionLoading ? "Adding…" : "Add"}</button>

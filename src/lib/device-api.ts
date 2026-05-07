@@ -1,6 +1,7 @@
 import api from "./api";
 import type {
   Device,
+  Friend,
   PeerSession,
   PairingCode,
   RegisterDeviceRequest,
@@ -70,5 +71,15 @@ export async function joinPeerSession(sessionId: string, deviceId: string): Prom
 
 export async function leavePeerSession(sessionId: string, deviceId: string): Promise<{ success: boolean }> {
   const { data } = await api.post(`/v1/sessions/${sessionId}/leave`, { device_id: deviceId });
+  return data;
+}
+
+export async function listFriends(): Promise<{ friends: Friend[] }> {
+  const { data } = await api.get("/v1/friends");
+  return data;
+}
+
+export async function getFriendDevices(userId: string): Promise<{ devices: Device[] }> {
+  const { data } = await api.get(`/v1/friends/${userId}/devices`);
   return data;
 }

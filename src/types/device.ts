@@ -41,6 +41,14 @@ export interface Device {
   last_active: string;
   created_at: string;
   is_revoked: boolean;
+  is_public: boolean;
+}
+
+export interface Friend {
+  user_id: string;
+  username: string;
+  display_name: string;
+  added_at: string;
 }
 
 export interface PeerSession {
@@ -63,6 +71,7 @@ export interface RegisterDeviceRequest {
   device_type: DeviceType;
   fingerprint: string;
   node_id?: string;
+  is_public?: boolean;
 }
 
 export interface RedeemPairingCodeRequest {
