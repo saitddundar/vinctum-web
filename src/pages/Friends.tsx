@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Search, UserPlus, UserMinus, Check, X } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
+import { Search, UserPlus, UserMinus, Check, X, Users } from "lucide-react";
 import { toast } from "sonner";
 import {
   searchUsers,
@@ -16,76 +17,70 @@ type Tab = "friends" | "requests" | "search";
 
 export default function Friends() {
   const { refresh: refreshNotifications } = useNotifications();
-  const [tab, setTab] = useState<Tab>("friends");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialTab = (searchParams.get("tab") as Tab) || "friends";
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [friends, setFriends] = useState<Friend[]>([]);
   const [requests, setRequests] = useState<Friend[]>([]);
   const [searchResults, setSearchResults] = useState<UserInfo[]>([]);
   const [query, setQuery] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadFriends();
-    loadRequests();
+    Promise.all([loadFriends(), loadRequests()]).finally(() => setLoading(false));
   }, []);
 
+  // Sync tab from URL param (e.g. navigated from notification)
+  useEffect(() => {
+    const t = searchParams.get("tab") as Tab | null;
+    if (t && ["friends", "requests", "search"].includes(t)) setTab(t);
+  }, [searchParams]);
+
+  function switchTab(t: Tab) {
+    setTab(t);
+    setSearchParams(t === "friends" ? {} : { tab: t });
+  }
+
   async function loadFriends() {
-    try {
-      setFriends(await listFriends());
-    } catch {
-      toast.error("Failed to load friends");
-    }
+    try { setFriends(await listFriends()); } catch { toast.error("Failed to load friends"); }
   }
 
   async function loadRequests() {
-    try {
-      setRequests(await listFriendRequests());
-    } catch {
-      toast.error("Failed to load friend requests");
-    }
+    try { setRequests(await listFriendRequests()); } catch { toast.error("Failed to load requests"); }
   }
 
   async function handleSearch() {
     if (!query.trim()) return;
     setLoading(true);
-    try {
-      setSearchResults(await searchUsers(query.trim()));
-    } catch {
-      toast.error("Search failed");
-    } finally {
-      setLoading(false);
-    }
+    try { setSearchResults(await searchUsers(query.trim())); }
+    catch { toast.error("Search failed"); }
+    finally { setLoading(false); }
   }
 
   async function handleSendRequest(userId: string) {
     try {
       await sendFriendRequest(userId);
       toast.success("Friend request sent");
-      setSearchResults((prev) => prev.filter((u) => u.user_id !== userId));
-    } catch (err: any) {
-      toast.error(err?.response?.data?.error || "Failed to send request");
-    }
+      setSearchResults(prev => prev.filter(u => u.user_id !== userId));
+    } catch (err: any) { toast.error(err?.response?.data?.error || "Failed to send request"); }
   }
 
   async function handleRespond(friendshipId: string, accept: boolean) {
     try {
       await respondToFriendRequest(friendshipId, accept);
       toast.success(accept ? "Friend request accepted" : "Friend request rejected");
-      setRequests((prev) => prev.filter((r) => r.id !== friendshipId));
+      setRequests(prev => prev.filter(r => r.id !== friendshipId));
       if (accept) loadFriends();
       refreshNotifications();
-    } catch {
-      toast.error("Failed to respond");
-    }
+    } catch { toast.error("Failed to respond"); }
   }
 
   async function handleRemove(friendshipId: string) {
     try {
       await removeFriend(friendshipId);
       toast.success("Friend removed");
-      setFriends((prev) => prev.filter((f) => f.id !== friendshipId));
-    } catch {
-      toast.error("Failed to remove friend");
-    }
+      setFriends(prev => prev.filter(f => f.id !== friendshipId));
+    } catch { toast.error("Failed to remove friend"); }
   }
 
   const tabs: { key: Tab; label: string; count?: number }[] = [
@@ -94,143 +89,140 @@ export default function Friends() {
     { key: "search", label: "Search" },
   ];
 
+  if (loading && !friends.length && !requests.length) return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <h1 style={{ fontSize: 22, fontWeight: 500, letterSpacing: "-0.02em", margin: 0 }}>Friends</h1>
+      {[1, 2, 3].map(i => <div key={i} className="glass-card-static animate-pulse" style={{ height: 56 }} />)}
+    </div>
+  );
+
   return (
-    <div className="space-y-6">
-      <h1 className="text-xl font-semibold text-gray-100">Friends</h1>
+    <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+      {/* Header */}
+      <div>
+        <h1 style={{ fontSize: 22, fontWeight: 500, letterSpacing: "-0.02em", margin: 0 }}>
+          Your <span className="font-serif" style={{ color: "var(--accent)" }}>friends</span>
+        </h1>
+        <p style={{ fontSize: 13, color: "var(--fg-2)", marginTop: 6, marginBottom: 0 }}>
+          Add friends to send files directly to their public devices.
+        </p>
+      </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 p-1 bg-gray-900/50 rounded-lg w-fit">
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`px-4 py-1.5 rounded-md text-sm transition-all ${
-              tab === t.key
-                ? "bg-emerald-500/20 text-emerald-400"
-                : "text-gray-500 hover:text-gray-300"
-            }`}
-          >
+      <div className="flex items-center gap-2" style={{ borderBottom: "1px solid var(--line)", paddingBottom: 14 }}>
+        {tabs.map(t => (
+          <button key={t.key} onClick={() => switchTab(t.key)} style={{ padding: "5px 12px", borderRadius: 8, fontSize: 12, border: "none", background: tab === t.key ? "oklch(0.78 0.15 160 / .1)" : "transparent", color: tab === t.key ? "var(--accent)" : "var(--muted)", cursor: "pointer", fontFamily: "Inter" }}>
             {t.label}
-            {t.count !== undefined && t.count > 0 && (
-              <span className="ml-1.5 text-xs opacity-60">({t.count})</span>
-            )}
+            {t.count !== undefined && t.count > 0 && <span style={{ fontSize: 10, color: "var(--muted-2)", marginLeft: 5 }}>{t.count}</span>}
           </button>
         ))}
       </div>
 
-      {/* Friends List */}
+      {/* Friends list */}
       {tab === "friends" && (
-        <div className="space-y-2">
-          {friends.length === 0 ? (
-            <p className="text-gray-500 text-sm py-8 text-center">
-              No friends yet. Search for users to add!
-            </p>
-          ) : (
-            friends.map((f) => (
-              <div
-                key={f.id}
-                className="glass-card-static flex items-center justify-between p-4 rounded-lg"
-              >
-                <div>
-                  <p className="text-sm font-medium text-gray-200">{f.user.username}</p>
-                  <p className="text-xs text-gray-500">{f.user.email}</p>
-                </div>
-                <button
-                  onClick={() => handleRemove(f.id)}
-                  className="p-2 text-gray-500 hover:text-red-400 transition-colors"
-                  title="Remove friend"
-                >
-                  <UserMinus className="w-4 h-4" />
-                </button>
-              </div>
-            ))
-          )}
-        </div>
-      )}
-
-      {/* Requests */}
-      {tab === "requests" && (
-        <div className="space-y-2">
-          {requests.length === 0 ? (
-            <p className="text-gray-500 text-sm py-8 text-center">
-              No pending friend requests.
-            </p>
-          ) : (
-            requests.map((r) => (
-              <div
-                key={r.id}
-                className="glass-card-static flex items-center justify-between p-4 rounded-lg"
-              >
-                <div>
-                  <p className="text-sm font-medium text-gray-200">{r.user.username}</p>
-                  <p className="text-xs text-gray-500">{r.user.email}</p>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => handleRespond(r.id, true)}
-                    className="p-2 text-gray-400 hover:text-emerald-400 bg-emerald-500/10 rounded-md transition-colors"
-                    title="Accept"
-                  >
-                    <Check className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => handleRespond(r.id, false)}
-                    className="p-2 text-gray-400 hover:text-red-400 bg-red-500/10 rounded-md transition-colors"
-                    title="Reject"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      )}
-
-      {/* Search */}
-      {tab === "search" && (
-        <div className="space-y-4">
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-              <input
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                placeholder="Search by username..."
-                className="w-full pl-10 pr-4 py-2 bg-gray-900/50 border border-gray-800/50 rounded-lg text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-emerald-500/30"
-              />
-            </div>
-            <button
-              onClick={handleSearch}
-              disabled={loading}
-              className="px-4 py-2 bg-emerald-500/20 text-emerald-400 rounded-lg text-sm hover:bg-emerald-500/30 transition-colors disabled:opacity-50"
-            >
-              Search
+        friends.length === 0 ? (
+          <div className="drop-zone" style={{ padding: 48, textAlign: "center" }}>
+            <Users size={28} style={{ color: "var(--muted-2)", margin: "0 auto 12px" }} />
+            <p style={{ fontSize: 13, color: "var(--muted)", marginBottom: 14 }}>No friends yet</p>
+            <button onClick={() => switchTab("search")} className="btn btn-primary" style={{ fontSize: 12 }}>
+              <Search size={12} /> Find users
             </button>
           </div>
-
-          <div className="space-y-2">
-            {searchResults.map((u) => (
-              <div
-                key={u.user_id}
-                className="glass-card-static flex items-center justify-between p-4 rounded-lg"
-              >
-                <div>
-                  <p className="text-sm font-medium text-gray-200">{u.username}</p>
-                  <p className="text-xs text-gray-500">{u.email}</p>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {friends.map(f => (
+              <div key={f.id} className="glass-card-static" style={{ padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div className="flex items-center gap-3">
+                  <div style={{ width: 34, height: 34, borderRadius: 99, background: "oklch(0.78 0.15 160 / .12)", border: "1px solid oklch(0.78 0.15 160 / .25)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 600, color: "var(--accent)", flexShrink: 0 }}>
+                    {f.user.username.slice(0, 2).toUpperCase()}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 13, color: "var(--fg)", fontWeight: 500 }}>{f.user.username}</div>
+                    <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 1 }}>{f.user.email}</div>
+                  </div>
                 </div>
-                <button
-                  onClick={() => handleSendRequest(u.user_id)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/20 text-emerald-400 rounded-md text-xs hover:bg-emerald-500/30 transition-colors"
-                >
-                  <UserPlus className="w-3.5 h-3.5" />
-                  Add
+                <button onClick={() => handleRemove(f.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted-2)", padding: 4 }} title="Remove friend">
+                  <UserMinus size={14} />
                 </button>
               </div>
             ))}
           </div>
+        )
+      )}
+
+      {/* Requests */}
+      {tab === "requests" && (
+        requests.length === 0 ? (
+          <div className="drop-zone" style={{ padding: 48, textAlign: "center" }}>
+            <Users size={28} style={{ color: "var(--muted-2)", margin: "0 auto 12px" }} />
+            <p style={{ fontSize: 13, color: "var(--muted)", margin: 0 }}>No pending requests</p>
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {requests.map(r => (
+              <div key={r.id} className="glass-card-static" style={{ padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div className="flex items-center gap-3">
+                  <div style={{ width: 34, height: 34, borderRadius: 99, background: "oklch(0.84 0.13 85 / .12)", border: "1px solid oklch(0.84 0.13 85 / .25)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 600, color: "var(--amber)", flexShrink: 0 }}>
+                    {r.user.username.slice(0, 2).toUpperCase()}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 13, color: "var(--fg)", fontWeight: 500 }}>{r.user.username}</div>
+                    <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 1 }}>{r.user.email}</div>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => handleRespond(r.id, true)} style={{ padding: "6px 12px", borderRadius: 8, border: "none", background: "oklch(0.78 0.15 160 / .1)", color: "var(--accent)", cursor: "pointer", fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}>
+                    <Check size={12} /> Accept
+                  </button>
+                  <button onClick={() => handleRespond(r.id, false)} style={{ padding: "6px 12px", borderRadius: 8, border: "none", background: "oklch(0.65 0.2 25 / .1)", color: "var(--red)", cursor: "pointer", fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}>
+                    <X size={12} /> Reject
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      )}
+
+      {/* Search */}
+      {tab === "search" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div className="flex gap-2">
+            <div style={{ position: "relative", flex: 1 }}>
+              <Search size={13} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--muted-2)" }} />
+              <input
+                type="text"
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && handleSearch()}
+                placeholder="Search by username…"
+                className="vt-input"
+                style={{ paddingLeft: 34, width: "100%" }}
+                autoFocus
+              />
+            </div>
+            <button onClick={handleSearch} disabled={loading} className="btn btn-primary" style={{ fontSize: 12, flexShrink: 0 }}>Search</button>
+          </div>
+          {searchResults.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {searchResults.map(u => (
+                <div key={u.user_id} className="glass-card-static" style={{ padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div className="flex items-center gap-3">
+                    <div style={{ width: 34, height: 34, borderRadius: 99, background: "oklch(1 0 0 / .06)", border: "1px solid var(--line)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 600, color: "var(--fg-2)", flexShrink: 0 }}>
+                      {u.username.slice(0, 2).toUpperCase()}
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 13, color: "var(--fg)", fontWeight: 500 }}>{u.username}</div>
+                      <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 1 }}>{u.email}</div>
+                    </div>
+                  </div>
+                  <button onClick={() => handleSendRequest(u.user_id)} style={{ padding: "6px 12px", borderRadius: 8, border: "none", background: "oklch(0.78 0.15 160 / .1)", color: "var(--accent)", cursor: "pointer", fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}>
+                    <UserPlus size={12} /> Add
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
