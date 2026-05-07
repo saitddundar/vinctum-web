@@ -2,9 +2,10 @@ import { useState } from "react";
 import { NavLink, Outlet, useNavigate, Link } from "react-router-dom";
 import {
   Activity, Monitor, Users, Send, Shield,
-  Settings, LogOut, Bell, Search, X, Menu, Download,
+  Settings, LogOut, Bell, Search, X, Menu, Download, UserPlus,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import { useNotifications } from "../context/NotificationContext";
 
 const NAV = [
   { to: "/dashboard", label: "Overview",   Icon: Activity },
@@ -12,11 +13,13 @@ const NAV = [
   { to: "/incoming",  label: "Receive",    Icon: Download },
   { to: "/devices",   label: "Devices",    Icon: Monitor },
   { to: "/sessions",  label: "Sessions",   Icon: Users },
+  { to: "/friends",   label: "Friends",    Icon: UserPlus },
   { to: "/network",   label: "Network",    Icon: Shield },
 ];
 
 export default function Layout() {
   const { user, logout } = useAuth();
+  const { counts } = useNotifications();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
 
@@ -155,18 +158,22 @@ export default function Layout() {
 
           {/* Notifications */}
           <div style={{ position: "relative" }}>
-            <button style={{
+            <button onClick={() => navigate("/friends?tab=requests")} style={{
               width: 32, height: 32, borderRadius: 9, border: "1px solid var(--line)",
               display: "flex", alignItems: "center", justifyContent: "center",
               background: "none", cursor: "pointer", color: "var(--muted)",
             }}>
               <Bell size={14} />
             </button>
-            <span style={{
-              position: "absolute", top: 6, right: 6,
-              width: 6, height: 6, borderRadius: 99,
-              background: "var(--amber)", border: "1.5px solid oklch(0.152 0.012 235)",
-            }} />
+            {counts.total > 0 && (
+              <span style={{
+                position: "absolute", top: 4, right: 4,
+                minWidth: 14, height: 14, borderRadius: 99, padding: "0 4px",
+                background: "var(--amber)", border: "1.5px solid oklch(0.152 0.012 235)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 9, fontWeight: 700, color: "#000",
+              }}>{counts.total > 9 ? "9+" : counts.total}</span>
+            )}
           </div>
 
           {/* Settings link */}
