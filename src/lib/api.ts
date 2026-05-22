@@ -36,4 +36,16 @@ export async function scoreRoute(req: RouteRequest): Promise<RouteResponse> {
   return data;
 }
 
+export interface PlatformStats {
+  total_users: number;
+  total_devices: number;
+  total_transfers: number;
+  total_bytes: number;
+}
+
+export async function getPlatformStats(): Promise<PlatformStats> {
+  const { data } = await api.get("/v1/stats");
+  return data;
+}
+
 export default api;
