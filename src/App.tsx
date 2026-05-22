@@ -20,6 +20,11 @@ import Incoming from "./pages/Incoming";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import Anomalies from "./pages/Anomalies";
+import Product from "./pages/Product";
+import Protocol from "./pages/Protocol";
+import Security from "./pages/Security";
+import Pricing from "./pages/Pricing";
+import DocsPage from "./pages/Docs";
 import NotFound from "./pages/NotFound";
 import ErrorBoundary from "./components/ErrorBoundary";
 
@@ -42,6 +47,11 @@ export default function App() {
           />
           <Routes>
             <Route path="/" element={<Home />} />
+            <Route path="/product" element={<Product />} />
+            <Route path="/protocol" element={<Protocol />} />
+            <Route path="/security" element={<Security />} />
+            <Route path="/pricing" element={<Pricing />} />
+            <Route path="/docs" element={<DocsPage />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/verify" element={<VerifyEmail />} />

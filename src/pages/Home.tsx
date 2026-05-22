@@ -1,6 +1,8 @@
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { Shield, Network, Lock, Monitor, Smartphone, ArrowRight, Check } from "lucide-react";
+import { Shield, Network, Lock, Monitor, ArrowRight, Check } from "lucide-react";
+import PublicHeader from "../components/PublicHeader";
+import Footer from "../components/Footer";
 
 export default function Home() {
   const { user } = useAuth();
@@ -8,59 +10,22 @@ export default function Home() {
 
   return (
     <div className="min-h-screen" style={{ background: "var(--bg)", color: "var(--fg)" }}>
-      <PublicHeader signedIn={signedIn} username={user?.username} />
-      <Hero signedIn={signedIn} username={user?.username} />
+      <PublicHeader />
+      <Hero signedIn={signedIn} />
       <Narrative />
       <HowItWorks />
-      <Protocol />
+      <ProtocolSection />
       <Features />
       <ByTheNumbers />
-      <Pricing />
+      <PricingSection />
       <ClosingCTA />
       <Footer />
     </div>
   );
 }
 
-function PublicHeader({ signedIn, username }: { signedIn: boolean; username?: string }) {
-  return (
-    <header style={{ borderBottom: "1px solid var(--line)", position: "sticky", top: 0, zIndex: 10, background: "oklch(0.155 0.012 235 / .85)", backdropFilter: "blur(12px)" }}>
-      <div style={{ maxWidth: 1160, margin: "0 auto", padding: "0 40px", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div className="flex items-center gap-8">
-          <span className="flex items-center gap-2" style={{ fontWeight: 600, fontSize: 15, letterSpacing: "-0.02em" }}>
-            <span className="logo-mark" />
-            vinctum
-          </span>
-          <nav className="hidden md:flex items-center gap-6">
-            {["Product", "Protocol", "Security", "Pricing", "Docs"].map(l => (
-              <span key={l} style={{ fontSize: 13, color: "var(--muted)", cursor: "pointer", fontWeight: 450 }}>{l}</span>
-            ))}
-          </nav>
-        </div>
-        <div className="flex items-center gap-3">
-          <span style={{ fontSize: 11, color: "var(--muted)" }}>
-            <span style={{ color: "var(--accent)", marginRight: 5 }}>●</span>all systems operational
-          </span>
-          {signedIn ? (
-            <>
-              <Link to="/dashboard" className="btn btn-ghost" style={{ padding: "7px 13px", fontSize: 12 }}>Dashboard</Link>
-              <Link to="/account" style={{ width: 28, height: 28, borderRadius: 99, background: "linear-gradient(135deg,var(--accent),var(--cyan))", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#06170f", textDecoration: "none", cursor: "pointer" }}>
-                {username?.slice(0, 2).toUpperCase()}
-              </Link>
-            </>
-          ) : (
-            <>
-              <Link to="/login" className="btn btn-ghost" style={{ padding: "7px 13px", fontSize: 12 }}>Sign in</Link>
-              <Link to="/register" className="btn btn-primary" style={{ padding: "7px 13px", fontSize: 12 }}>Get started</Link>
-            </>
-          )}
-        </div>
-      </div>
-    </header>
-  );
-}
 
-function Hero({ signedIn, username }: { signedIn: boolean; username?: string }) {
+function Hero({ signedIn }: { signedIn: boolean }) {
   return (
     <section className="mesh-bg grid-bg" style={{ padding: "120px 40px 100px", position: "relative", overflow: "hidden" }}>
       <div style={{ maxWidth: 1160, margin: "0 auto", position: "relative", zIndex: 2 }}>
@@ -224,7 +189,7 @@ function HowItWorks() {
   );
 }
 
-function Protocol() {
+function ProtocolSection() {
   return (
     <section style={{ padding: "100px 40px", borderTop: "1px solid var(--line)" }}>
       <div style={{ maxWidth: 1160, margin: "0 auto", display: "grid", gridTemplateColumns: "1fr 1.1fr", gap: 80, alignItems: "center" }}>
@@ -331,7 +296,7 @@ function ByTheNumbers() {
   );
 }
 
-function Pricing() {
+function PricingSection() {
   const tiers = [
     { name:"Personal", price:"Free",  sub:"forever",        features:["Up to 5 devices","Unlimited transfer size","Community support","Self-host optional"],  cta:"Start free" },
     { name:"Pro",      price:"$6",    sub:"per month",      features:["Unlimited devices","Priority relay pool","Family sharing","Mobile backup","Email support"], cta:"Try Pro", highlight:true },
@@ -390,36 +355,3 @@ function ClosingCTA() {
   );
 }
 
-function Footer() {
-  return (
-    <footer style={{ borderTop: "1px solid var(--line)", padding: "56px 40px 32px", background: "oklch(0.13 0.012 235)" }}>
-      <div style={{ maxWidth: 1160, margin: "0 auto" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1.4fr repeat(4,1fr)", gap: 40, paddingBottom: 40, borderBottom: "1px solid var(--line)" }}>
-          <div>
-            <span className="flex items-center gap-2" style={{ fontWeight: 600, fontSize: 15, letterSpacing: "-0.02em" }}>
-              <span className="logo-mark" />vinctum
-            </span>
-            <p style={{ fontSize: 13, color: "var(--muted)", marginTop: 14, lineHeight: 1.6, maxWidth: 240 }}>Zero-knowledge file transfer between your own devices. Built in Istanbul.</p>
-          </div>
-          {[
-            { title:"Product", links:["Features","Protocol","Security","Changelog"] },
-            { title:"Developers", links:["Docs","API","CLI","Self-host"] },
-            { title:"Company", links:["About","Blog","Careers","Contact"] },
-            { title:"Legal", links:["Privacy","Terms","Security.txt"] },
-          ].map(c => (
-            <div key={c.title}>
-              <div style={{ fontSize: 10.5, color: "var(--muted-2)", textTransform: "uppercase", letterSpacing: ".12em", fontWeight: 600, marginBottom: 14 }}>{c.title}</div>
-              <div className="flex flex-col gap-2.5">
-                {c.links.map(l => <span key={l} style={{ fontSize: 13, color: "var(--fg-2)", cursor: "pointer" }}>{l}</span>)}
-              </div>
-            </div>
-          ))}
-        </div>
-        <div className="flex justify-between items-center pt-6" style={{ fontSize: 11.5, color: "var(--muted-2)" }}>
-          <span>© 2026 Vinctum Labs</span>
-          <span className="font-mono">build 2.1.3 · f4a1c27</span>
-        </div>
-      </div>
-    </footer>
-  );
-}
