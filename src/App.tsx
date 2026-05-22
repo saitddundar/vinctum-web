@@ -27,6 +27,14 @@ import Pricing from "./pages/Pricing";
 import DocsPage from "./pages/Docs";
 import NotFound from "./pages/NotFound";
 import ErrorBoundary from "./components/ErrorBoundary";
+import AdminGuard from "./components/AdminGuard";
+import AdminLayout from "./components/AdminLayout";
+import AdminDashboard from "./pages/admin/Dashboard";
+import AdminUsers from "./pages/admin/Users";
+import AdminDevices from "./pages/admin/Devices";
+import AdminTransfers from "./pages/admin/Transfers";
+import AdminAuditLogs from "./pages/admin/AuditLogs";
+import AdminServices from "./pages/admin/Services";
 
 export default function App() {
   return (
@@ -69,6 +77,16 @@ export default function App() {
                 <Route path="/notifications" element={<Notifications />} />
                 <Route path="/incoming" element={<Incoming />} />
                 <Route path="/network" element={<Anomalies />} />
+              </Route>
+            </Route>
+            <Route element={<AdminGuard />}>
+              <Route element={<AdminLayout />}>
+                <Route path="/admin" element={<AdminDashboard />} />
+                <Route path="/admin/users" element={<AdminUsers />} />
+                <Route path="/admin/devices" element={<AdminDevices />} />
+                <Route path="/admin/transfers" element={<AdminTransfers />} />
+                <Route path="/admin/audit-logs" element={<AdminAuditLogs />} />
+                <Route path="/admin/services" element={<AdminServices />} />
               </Route>
             </Route>
             <Route path="*" element={<NotFound />} />
