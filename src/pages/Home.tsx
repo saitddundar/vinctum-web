@@ -1,12 +1,19 @@
 import { Link } from "react-router-dom";
+import { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import { Shield, Network, Lock, Monitor, ArrowRight, Check } from "lucide-react";
 import PublicHeader from "../components/PublicHeader";
 import Footer from "../components/Footer";
+import { getPlatformStats, type PlatformStats } from "../lib/api";
 
 export default function Home() {
   const { user } = useAuth();
   const signedIn = !!user;
+  const [stats, setStats] = useState<PlatformStats | null>(null);
+
+  useEffect(() => {
+    getPlatformStats().then(setStats).catch(() => {});
+  }, []);
 
   return (
     <div className="min-h-screen" style={{ background: "var(--bg)", color: "var(--fg)" }}>
@@ -16,7 +23,7 @@ export default function Home() {
       <HowItWorks />
       <ProtocolSection />
       <Features />
-      <ByTheNumbers />
+      <ByTheNumbers stats={stats} />
       <PricingSection />
       <ClosingCTA />
       <Footer />
@@ -279,12 +286,33 @@ function Features() {
   );
 }
 
-function ByTheNumbers() {
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB", "PB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  const val = bytes / Math.pow(1024, i);
+  return `${val < 10 ? val.toFixed(1) : Math.round(val)} ${units[i]}`;
+}
+
+function formatCount(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
+  return n.toString();
+}
+
+function ByTheNumbers({ stats }: { stats: PlatformStats | null }) {
+  const items = [
+    [stats ? formatBytes(stats.total_bytes) : "---", "transferred through the mesh"],
+    [stats ? formatCount(stats.total_devices) : "---", "active devices paired"],
+    [stats ? formatCount(stats.total_transfers) : "---", "encrypted transfers completed"],
+    ["0", "bytes of user data on our servers"],
+  ];
+
   return (
     <section style={{ padding: "80px 40px", borderTop: "1px solid var(--line)", background: "oklch(0.14 0.012 235)" }}>
       <div style={{ maxWidth: 1160, margin: "0 auto" }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", borderTop: "1px solid var(--line)", borderBottom: "1px solid var(--line)" }}>
-          {[["47 TB","moved through the mesh this week"],["12.4k","active devices paired"],["87%","connections that succeed direct"],["0","bytes of user data on our servers"]].map(([n,l],i) => (
+          {items.map(([n, l], i) => (
             <div key={i} style={{ padding: "36px 24px", borderRight: i < 3 ? "1px solid var(--line)" : "none" }}>
               <div className="font-mono" style={{ fontSize: 36, fontWeight: 500, letterSpacing: "-0.03em" }}>{n}</div>
               <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 8, lineHeight: 1.45 }}>{l}</div>

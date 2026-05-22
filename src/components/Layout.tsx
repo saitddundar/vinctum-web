@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { NavLink, Outlet, useNavigate, Link } from "react-router-dom";
 import {
   Activity, Monitor, Users, Send, Shield,
@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useNotifications } from "../context/NotificationContext";
+import { listDevices, listPeerSessions } from "../lib/device-api";
 
 const NAV = [
   { to: "/dashboard", label: "Overview",   Icon: Activity },
@@ -22,6 +23,18 @@ export default function Layout() {
   const { counts } = useNotifications();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  const [meshStats, setMeshStats] = useState({ devices: "—", sessions: "—" });
+
+  useEffect(() => {
+    Promise.all([listDevices(), listPeerSessions()])
+      .then(([d, s]) => {
+        setMeshStats({
+          devices: `${d.devices?.length ?? 0}`,
+          sessions: `${s.sessions?.length ?? 0}`,
+        });
+      })
+      .catch(() => {});
+  }, []);
 
   function handleLogout() {
     logout();
@@ -96,7 +109,7 @@ export default function Layout() {
             </div>
           </div>
           <div className="flex gap-4">
-            {[["Peers", "4/5"], ["Latency", "18ms"], ["Uptime", "99%"]].map(([l, v]) => (
+            {[["Devices", meshStats.devices], ["Sessions", meshStats.sessions], ["Cipher", "AES-256"]].map(([l, v]) => (
               <div key={l}>
                 <div style={{ fontSize: 9, color: "var(--muted-2)", letterSpacing: ".07em", textTransform: "uppercase" }}>{l}</div>
                 <div className="font-mono" style={{ fontSize: 14, color: "var(--fg)", letterSpacing: "-0.02em", marginTop: 2 }}>{v}</div>
