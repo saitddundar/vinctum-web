@@ -31,6 +31,16 @@ export async function cancelTransfer(transferId: string, reason?: string): Promi
   return data;
 }
 
+export async function pauseTransfer(transferId: string): Promise<{ transfer_id: string; status: string }> {
+  const { data } = await api.post(`/v1/transfers/${transferId}/pause`);
+  return data;
+}
+
+export async function resumeTransfer(transferId: string): Promise<{ transfer_id: string; status: string }> {
+  const { data } = await api.post(`/v1/transfers/${transferId}/resume`);
+  return data;
+}
+
 /**
  * Uploads a single chunk via multipart form data.
  */

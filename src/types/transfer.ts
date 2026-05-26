@@ -5,7 +5,8 @@ export type TransferStatus =
   | "TRANSFER_STATUS_COMPLETED"
   | "TRANSFER_STATUS_FAILED"
   | "TRANSFER_STATUS_CANCELLED"
-  | "TRANSFER_STATUS_AWAITING_APPROVAL";
+  | "TRANSFER_STATUS_AWAITING_APPROVAL"
+  | "TRANSFER_STATUS_PAUSED";
 
 export interface InitiateTransferRequest {
   sender_node_id: string;
