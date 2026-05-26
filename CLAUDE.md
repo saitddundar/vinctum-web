@@ -16,6 +16,7 @@ src/
     ErrorBoundary.tsx       # Global error boundary with fallback UI
     Layout.tsx              # Sidebar layout (nav + user profile + logout + notification badge)
     ProtectedRoute.tsx      # Auth guard, redirects to /login
+    TransferProgress.tsx    # Circular SVG progress ring with pause/resume/cancel controls
   context/
     AuthContext.tsx          # Global auth state, token interceptors
     NotificationContext.tsx  # Notification polling (15s), toast on new friend requests
@@ -38,9 +39,9 @@ src/
     Dashboard.tsx           # Protected, sidebar layout, stats + devices + quick actions
     Devices.tsx             # Device management + pairing flow + public/private visibility toggle
     Sessions.tsx            # Peer session management
-    Transfers.tsx           # E2E encrypted file transfers (device/session/friend send modes)
+    Transfers.tsx           # E2E encrypted file transfers (device/session/friend send modes) with circular progress + pause/resume
     Friends.tsx             # Friend list, pending requests, user search
-    Incoming.tsx            # Incoming file receive with progress tracking
+    Incoming.tsx            # Incoming file receive with circular progress, pause/resume controls
     Notifications.tsx       # Notification feed (friend requests), links to Friends page
     Anomalies.tsx           # Network page with metrics and security scan
     NotFound.tsx            # 404 page
@@ -81,4 +82,6 @@ npm run lint
 - Axios interceptors auto-attach Bearer token and handle 401 refresh
 - Device visibility: public (friends can see and send files) / private (only owner)
 - Transfer send modes: Device (own devices), Session (all devices in session), Friend (friend's public devices)
+- Transfer pause/resume: `pauseTransfer()`/`resumeTransfer()` in transfer-api.ts. Circular progress ring (`TransferProgress` component) with Pause/Resume/Cancel buttons on both send (Transfers.tsx) and receive (Incoming.tsx) pages. Paused state shown with amber color.
+- Transfer statuses: PENDING, IN_PROGRESS, PAUSED, COMPLETED, FAILED, CANCELLED, AWAITING_APPROVAL
 - Notification polling every 15s, toast notification on new friend requests with "View" action
