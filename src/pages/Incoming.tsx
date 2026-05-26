@@ -2,10 +2,11 @@ import { useEffect, useState, useCallback } from "react";
 import { Check, X, Download, HardDrive, Clock, Loader2, CheckCircle2, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { listDevices } from "../lib/device-api";
-import { listTransfers, getTransferStatus } from "../lib/transfer-api";
+import { listTransfers, getTransferStatus, pauseTransfer, resumeTransfer, cancelTransfer } from "../lib/transfer-api";
 import { respondToTransfer } from "../lib/friend-api";
 import { useNotifications } from "../context/NotificationContext";
 import type { TransferInfo, TransferStatusResponse } from "../types/transfer";
+import TransferProgress from "../components/TransferProgress";
 import type { Device } from "../types/device";
 
 function formatBytes(bytes: number): string {
@@ -58,6 +59,7 @@ export default function Incoming() {
             } else if (
               t.status === "TRANSFER_STATUS_PENDING" ||
               t.status === "TRANSFER_STATUS_IN_PROGRESS" ||
+              t.status === "TRANSFER_STATUS_PAUSED" ||
               t.status === "TRANSFER_STATUS_COMPLETED" ||
               t.status === "TRANSFER_STATUS_FAILED"
             ) {
@@ -83,7 +85,7 @@ export default function Incoming() {
   useEffect(() => {
     if (active.length === 0) return;
     const inProgress = active.filter(
-      t => t.status === "TRANSFER_STATUS_PENDING" || t.status === "TRANSFER_STATUS_IN_PROGRESS"
+      t => t.status === "TRANSFER_STATUS_PENDING" || t.status === "TRANSFER_STATUS_IN_PROGRESS" || t.status === "TRANSFER_STATUS_PAUSED"
     );
     if (inProgress.length === 0) return;
 
@@ -171,7 +173,7 @@ export default function Incoming() {
       ) : tab === "pending" ? (
         <PendingList transfers={pending} devices={devices} onRespond={handleRespond} />
       ) : (
-        <ActiveList transfers={active} devices={devices} statuses={statuses} />
+        <ActiveList transfers={active} devices={devices} statuses={statuses} onRefresh={load} />
       )}
     </div>
   );
@@ -254,12 +256,26 @@ function PendingList({
 
 /* ─── Active List ──────────────────────────────────────────── */
 function ActiveList({
-  transfers, devices, statuses,
+  transfers, devices, statuses, onRefresh,
 }: {
   transfers: TransferInfo[];
   devices: Device[];
   statuses: Record<string, TransferStatusResponse>;
+  onRefresh: () => void;
 }) {
+  async function handlePause(id: string) {
+    try { await pauseTransfer(id); toast.success("Transfer paused"); onRefresh(); }
+    catch { toast.error("Failed to pause transfer"); }
+  }
+  async function handleResume(id: string) {
+    try { await resumeTransfer(id); toast.success("Transfer resumed"); onRefresh(); }
+    catch { toast.error("Failed to resume transfer"); }
+  }
+  async function handleCancel(id: string) {
+    try { await cancelTransfer(id, "Cancelled by receiver"); toast.success("Transfer cancelled"); onRefresh(); }
+    catch { toast.error("Failed to cancel transfer"); }
+  }
+
   if (transfers.length === 0) {
     return (
       <div style={{ padding: "60px 24px", textAlign: "center", border: "1px dashed var(--line-2)", borderRadius: 14 }}>
@@ -280,8 +296,38 @@ function ActiveList({
           : t.progress_percent || 0;
         const isCompleted = t.status === "TRANSFER_STATUS_COMPLETED";
         const isFailed = t.status === "TRANSFER_STATUS_FAILED";
+        const isPaused = t.status === "TRANSFER_STATUS_PAUSED";
         const isInProgress = t.status === "TRANSFER_STATUS_IN_PROGRESS" || t.status === "TRANSFER_STATUS_PENDING";
+        const isRunning = isInProgress || isPaused;
 
+        // Show circular progress for active/paused transfers
+        if (isRunning) {
+          return (
+            <div key={t.transfer_id}>
+              <TransferProgress
+                percent={progress}
+                filename={t.filename}
+                chunksLabel={status ? `Chunks: ${status.chunks_transferred}/${status.total_chunks}` : undefined}
+                bytesLabel={status ? `${formatBytes(status.bytes_transferred)} / ${formatBytes(status.total_bytes)}` : formatBytes(t.total_size_bytes)}
+                paused={isPaused}
+                showControls
+                onPause={() => handlePause(t.transfer_id)}
+                onResume={() => handleResume(t.transfer_id)}
+                onCancel={() => handleCancel(t.transfer_id)}
+                color={isPaused ? "var(--amber)" : "var(--accent)"}
+              />
+              {device && (
+                <div style={{ marginTop: -8, paddingLeft: 136, paddingBottom: 4 }}>
+                  <span className="flex items-center gap-1" style={{ fontSize: 11, color: "var(--muted-2)" }}>
+                    <HardDrive size={10} /> {device.name} · {timeAgo(t.created_at)}
+                  </span>
+                </div>
+              )}
+            </div>
+          );
+        }
+
+        // Completed/failed transfers keep the card layout
         return (
           <div key={t.transfer_id} style={{
             padding: "18px 20px", borderRadius: 12,
@@ -289,7 +335,6 @@ function ActiveList({
             border: `1px solid ${isCompleted ? "oklch(0.78 0.15 160 / .2)" : isFailed ? "oklch(0.72 0.17 25 / .2)" : "var(--line)"}`,
             display: "flex", flexDirection: "column", gap: 12,
           }}>
-            {/* Top row */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -308,32 +353,13 @@ function ActiveList({
                   )}
                 </div>
               </div>
-              {isInProgress && (
-                <span className="font-mono" style={{ fontSize: 13, fontWeight: 600, color: "var(--accent)" }}>
-                  {progress}%
-                </span>
-              )}
             </div>
-
-            {/* Progress bar */}
-            {(isInProgress || isCompleted) && (
+            {isCompleted && (
               <div style={{ height: 4, borderRadius: 99, background: "oklch(1 0 0 / .06)", overflow: "hidden" }}>
                 <div style={{
-                  height: "100%", borderRadius: 99,
-                  width: `${isCompleted ? 100 : progress}%`,
-                  background: isCompleted
-                    ? "linear-gradient(90deg, var(--accent), var(--cyan))"
-                    : "var(--accent)",
-                  transition: "width .5s ease",
+                  height: "100%", borderRadius: 99, width: "100%",
+                  background: "linear-gradient(90deg, var(--accent), var(--cyan))",
                 }} />
-              </div>
-            )}
-
-            {/* Status details */}
-            {status && isInProgress && (
-              <div style={{ display: "flex", gap: 20, fontSize: 11.5, color: "var(--muted)" }}>
-                <span>Chunks: {status.chunks_transferred}/{status.total_chunks}</span>
-                <span>Received: {formatBytes(status.bytes_transferred)} / {formatBytes(status.total_bytes)}</span>
               </div>
             )}
           </div>
@@ -348,6 +374,7 @@ function StatusBadge({ status }: { status: string }) {
   const config: Record<string, { label: string; color: string; bg: string; icon: typeof Clock }> = {
     TRANSFER_STATUS_PENDING: { label: "Queued", color: "var(--amber)", bg: "oklch(0.84 0.13 85 / .1)", icon: Clock },
     TRANSFER_STATUS_IN_PROGRESS: { label: "Transferring", color: "var(--accent)", bg: "oklch(0.78 0.15 160 / .1)", icon: Loader2 },
+    TRANSFER_STATUS_PAUSED: { label: "Paused", color: "var(--amber)", bg: "oklch(0.84 0.13 85 / .1)", icon: Clock },
     TRANSFER_STATUS_COMPLETED: { label: "Completed", color: "var(--accent)", bg: "oklch(0.78 0.15 160 / .1)", icon: CheckCircle2 },
     TRANSFER_STATUS_FAILED: { label: "Failed", color: "var(--red)", bg: "oklch(0.72 0.17 25 / .1)", icon: XCircle },
   };
