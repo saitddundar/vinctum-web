@@ -1,10 +1,11 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { toast } from "sonner";
-import { FileUp, Upload, Lock, ShieldCheck, CircleDot, Check, X, Users, UserPlus } from "lucide-react";
+import { FileUp, Upload, Lock, ShieldCheck, CircleDot, Check, X, Users, UserPlus, Pause, Play } from "lucide-react";
 import type { Device, PeerSession, Friend } from "../types/device";
 import type { TransferInfo, TransferStatus } from "../types/transfer";
 import { listDevices, listPeerSessions, listFriends, getFriendDevices } from "../lib/device-api";
-import { initiateTransfer, listTransfers, cancelTransfer, getTransferStatus, uploadFile, downloadFile } from "../lib/transfer-api";
+import { initiateTransfer, listTransfers, cancelTransfer, pauseTransfer, resumeTransfer, getTransferStatus, uploadFile, downloadFile } from "../lib/transfer-api";
+import TransferProgress from "../components/TransferProgress";
 import { ensureDeviceKeys, getRemoteDeviceKey, generateEphemeralKeyPair, deriveTransferKey, deriveReceiverKey } from "../lib/device-key";
 
 function formatBytes(b: number) {
@@ -22,7 +23,7 @@ function timeAgo(iso: string) {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 function isActive(s: TransferStatus) {
-  return s === "TRANSFER_STATUS_PENDING" || s === "TRANSFER_STATUS_IN_PROGRESS";
+  return s === "TRANSFER_STATUS_PENDING" || s === "TRANSFER_STATUS_IN_PROGRESS" || s === "TRANSFER_STATUS_PAUSED";
 }
 
 const STATUS_LABEL: Record<TransferStatus, string> = {
@@ -32,6 +33,8 @@ const STATUS_LABEL: Record<TransferStatus, string> = {
   TRANSFER_STATUS_COMPLETED:   "Completed",
   TRANSFER_STATUS_FAILED:      "Failed",
   TRANSFER_STATUS_CANCELLED:   "Cancelled",
+  TRANSFER_STATUS_AWAITING_APPROVAL: "Awaiting",
+  TRANSFER_STATUS_PAUSED:      "Paused",
 };
 const STATUS_COLOR: Record<TransferStatus, string> = {
   TRANSFER_STATUS_UNSPECIFIED: "var(--muted-2)",
@@ -40,6 +43,8 @@ const STATUS_COLOR: Record<TransferStatus, string> = {
   TRANSFER_STATUS_COMPLETED:   "var(--accent)",
   TRANSFER_STATUS_FAILED:      "var(--red)",
   TRANSFER_STATUS_CANCELLED:   "var(--muted-2)",
+  TRANSFER_STATUS_AWAITING_APPROVAL: "var(--amber)",
+  TRANSFER_STATUS_PAUSED:      "var(--amber)",
 };
 
 type FilterStatus = "all" | "active" | "completed" | "failed";
@@ -184,6 +189,16 @@ export default function Transfers() {
     catch (e: any) { toast.error(e?.response?.data?.error || "Failed"); }
   }
 
+  async function handlePause(id: string) {
+    try { await pauseTransfer(id); toast.success("Transfer paused"); await fetchData(); }
+    catch (e: any) { toast.error(e?.response?.data?.error || "Failed to pause"); }
+  }
+
+  async function handleResume(id: string) {
+    try { await resumeTransfer(id); toast.success("Transfer resumed"); await fetchData(); }
+    catch (e: any) { toast.error(e?.response?.data?.error || "Failed to resume"); }
+  }
+
   async function handleDownload(t: TransferInfo) {
     if (!myDevice?.node_id || !myDevice?.device_id) return;
     setDownloading(true);
@@ -268,21 +283,11 @@ export default function Transfers() {
 
       {/* Upload progress */}
       {uploadProgress && (
-        <div className="glass-card-static" style={{ padding: 16 }}>
-          <div className="flex items-center gap-3" style={{ marginBottom: 10 }}>
-            <div style={{ width: 14, height: 14, border: "2px solid var(--accent)", borderTopColor: "transparent", borderRadius: 99, animation: "spin .8s linear infinite" }} />
-            <span style={{ fontSize: 13, color: "var(--fg-2)" }}>Uploading…</span>
-            <span className="font-mono" style={{ fontSize: 12, color: "var(--muted)", marginLeft: "auto" }}>
-              {uploadProgress.total > 0 ? `${Math.round((uploadProgress.sent / uploadProgress.total) * 100)}%` : "0%"}
-            </span>
-          </div>
-          <div style={{ height: 3, background: "var(--line)", borderRadius: 99, overflow: "hidden" }}>
-            <div style={{ width: `${uploadProgress.total > 0 ? (uploadProgress.sent / uploadProgress.total) * 100 : 0}%`, height: "100%", background: "var(--accent)", transition: "width .3s" }} />
-          </div>
-          <div className="font-mono" style={{ fontSize: 11, color: "var(--muted-2)", marginTop: 8 }}>
-            Chunks: {uploadProgress.sent} / {uploadProgress.total}
-          </div>
-        </div>
+        <TransferProgress
+          percent={uploadProgress.total > 0 ? (uploadProgress.sent / uploadProgress.total) * 100 : 0}
+          filename={selectedFile?.name || "Uploading..."}
+          chunksLabel={`Chunks: ${uploadProgress.sent} / ${uploadProgress.total}`}
+        />
       )}
 
       {/* Download progress */}
@@ -319,9 +324,11 @@ export default function Transfers() {
                   {isActive(t.status) && (
                     <div className="flex items-center gap-2" style={{ marginTop: 5 }}>
                       <div style={{ flex: 1, height: 3, background: "var(--line)", borderRadius: 99, overflow: "hidden", maxWidth: 200 }}>
-                        <div style={{ width: `${t.progress_percent}%`, height: "100%", background: "var(--amber)" }} />
+                        <div style={{ width: `${t.progress_percent}%`, height: "100%", background: t.status === "TRANSFER_STATUS_PAUSED" ? "var(--amber)" : "var(--accent)", transition: "width .3s" }} />
                       </div>
-                      <span className="font-mono" style={{ fontSize: 10, color: "var(--muted-2)" }}>{t.progress_percent}%</span>
+                      <span className="font-mono" style={{ fontSize: 10, color: "var(--muted-2)" }}>
+                        {t.progress_percent}%{t.status === "TRANSFER_STATUS_PAUSED" ? " (paused)" : ""}
+                      </span>
                     </div>
                   )}
                 </div>
@@ -337,6 +344,16 @@ export default function Transfers() {
                 <div className="flex gap-2">
                   {!isSender && t.status === "TRANSFER_STATUS_COMPLETED" && (
                     <button onClick={() => handleDownload(t)} disabled={downloading} style={{ fontSize: 11, color: "var(--accent)", background: "none", border: "none", cursor: "pointer" }}>↓</button>
+                  )}
+                  {t.status === "TRANSFER_STATUS_IN_PROGRESS" && (
+                    <button onClick={() => handlePause(t.transfer_id)} title="Pause" style={{ fontSize: 11, color: "var(--amber)", background: "none", border: "none", cursor: "pointer" }}>
+                      <Pause size={12} />
+                    </button>
+                  )}
+                  {t.status === "TRANSFER_STATUS_PAUSED" && (
+                    <button onClick={() => handleResume(t.transfer_id)} title="Resume" style={{ fontSize: 11, color: "var(--accent)", background: "none", border: "none", cursor: "pointer" }}>
+                      <Play size={12} />
+                    </button>
                   )}
                   {isActive(t.status) && (
                     <button onClick={() => handleCancel(t.transfer_id)} style={{ fontSize: 11, color: "var(--muted-2)", background: "none", border: "none", cursor: "pointer" }}>
