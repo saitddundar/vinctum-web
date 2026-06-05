@@ -10,6 +10,7 @@ import {
   listFriendRequests,
   removeFriend,
 } from "../lib/friend-api";
+import { getPresenceBulk, type PresenceInfo } from "../lib/presence-api";
 import { useNotifications } from "../context/NotificationContext";
 import type { Friend, UserInfo } from "../types/friend";
 
@@ -23,12 +24,33 @@ export default function Friends() {
   const [friends, setFriends] = useState<Friend[]>([]);
   const [requests, setRequests] = useState<Friend[]>([]);
   const [searchResults, setSearchResults] = useState<UserInfo[]>([]);
+  const [onlineUsers, setOnlineUsers] = useState<Record<string, boolean>>({});
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     Promise.all([loadFriends(), loadRequests()]).finally(() => setLoading(false));
   }, []);
+
+  // Poll presence
+  useEffect(() => {
+    if (friends.length === 0) return;
+    const fetchPresence = async () => {
+      try {
+        const userIds = friends.map(f => f.user.user_id);
+        const res = await getPresenceBulk(userIds);
+        const map: Record<string, boolean> = {};
+        res.presence.forEach(p => {
+          map[p.user_id] = p.online;
+        });
+        setOnlineUsers(map);
+      } catch {}
+    };
+    fetchPresence();
+    const interval = setInterval(fetchPresence, 30000);
+    return () => clearInterval(interval);
+  }, [friends]);
+
 
   // Sync tab from URL param (e.g. navigated from notification)
   useEffect(() => {
@@ -133,8 +155,13 @@ export default function Friends() {
             {friends.map(f => (
               <div key={f.id} className="glass-card-static" style={{ padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <div className="flex items-center gap-3">
-                  <div style={{ width: 34, height: 34, borderRadius: 99, background: "oklch(0.78 0.15 160 / .12)", border: "1px solid oklch(0.78 0.15 160 / .25)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 600, color: "var(--accent)", flexShrink: 0 }}>
-                    {f.user.username.slice(0, 2).toUpperCase()}
+                  <div style={{ position: "relative" }}>
+                    <div style={{ width: 34, height: 34, borderRadius: 99, background: "oklch(0.78 0.15 160 / .12)", border: "1px solid oklch(0.78 0.15 160 / .25)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 600, color: "var(--accent)", flexShrink: 0 }}>
+                      {f.user.username.slice(0, 2).toUpperCase()}
+                    </div>
+                    {onlineUsers[f.user.user_id] && (
+                      <span style={{ position: "absolute", bottom: -2, right: -2, width: 9, height: 9, borderRadius: 99, background: "var(--accent)", border: "2px solid var(--bg)" }} />
+                    )}
                   </div>
                   <div>
                     <div style={{ fontSize: 13, color: "var(--fg)", fontWeight: 500 }}>{f.user.username}</div>

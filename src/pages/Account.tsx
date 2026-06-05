@@ -56,7 +56,7 @@ const sub: React.CSSProperties = {
 
 /* ─── Root ────────────────────────────────────────────────────────── */
 export default function Account() {
-  const { user, logout } = useAuth();
+  const { user, logout, avatarBase64 } = useAuth();
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("profile");
 
@@ -106,12 +106,17 @@ export default function Account() {
           <div style={{ marginBottom: 28, display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 6 }}>
             <div style={{
               width: 48, height: 48, borderRadius: 14,
-              background: "linear-gradient(135deg, oklch(0.25 0.02 235), oklch(0.2 0.02 235))",
+              background: avatarBase64 ? "transparent" : "linear-gradient(135deg, oklch(0.25 0.02 235), oklch(0.2 0.02 235))",
               border: "1px solid var(--line)",
               display: "flex", alignItems: "center", justifyContent: "center",
               fontSize: 16, fontWeight: 700, color: "var(--fg)", letterSpacing: "-0.02em",
+              overflow: "hidden"
             }}>
-              {initials}
+              {avatarBase64 ? (
+                <img src={`data:image/jpeg;base64,${avatarBase64}`} alt="Avatar" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              ) : (
+                initials
+              )}
             </div>
             <div>
               <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--fg)" }}>{user?.username}</div>
@@ -194,14 +199,46 @@ function Section({
 
 /* ─── Profile ─────────────────────────────────────────────────────── */
 function ProfileTab({ user }: { user: any }) {
+  const { avatarBase64, setAvatar } = useAuth();
   const [displayName, setDisplayName] = useState(user?.username || "");
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   function handleSave() {
     if (!displayName.trim() || displayName === user?.username) return;
     setSaving(true);
     setTimeout(() => { setSaving(false); toast.success("Display name updated"); }, 500);
+  }
+
+  async function handleAvatarSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 1024 * 1024) {
+      toast.error("Image must be under 1MB");
+      return;
+    }
+    
+    setUploadingAvatar(true);
+    try {
+      const buffer = await file.arrayBuffer();
+      const bytes = new Uint8Array(buffer);
+      let binary = "";
+      for (let i = 0; i < bytes.byteLength; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      const b64 = btoa(binary);
+      
+      const { updateAvatar } = await import("../lib/auth-api");
+      await updateAvatar(b64);
+      setAvatar(b64);
+      toast.success("Profile picture updated");
+    } catch {
+      toast.error("Failed to update profile picture");
+    } finally {
+      setUploadingAvatar(false);
+    }
   }
 
   function copyId() {
@@ -212,6 +249,35 @@ function ProfileTab({ user }: { user: any }) {
 
   return (
     <Section title="Profile" description="Your identity on the Vinctum mesh.">
+      {/* Avatar */}
+      <div style={row}>
+        <div style={{ flex: 1 }}>
+          <div style={label}>Profile Picture</div>
+          <div style={sub}>Square image, max 1MB.</div>
+        </div>
+        <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+          <div style={{
+            width: 56, height: 56, borderRadius: 16,
+            background: avatarBase64 ? "transparent" : "linear-gradient(135deg, oklch(0.25 0.02 235), oklch(0.2 0.02 235))",
+            border: "1px solid var(--line)", overflow: "hidden",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 18, fontWeight: 700, color: "var(--fg)"
+          }}>
+            {avatarBase64 ? (
+              <img src={`data:image/jpeg;base64,${avatarBase64}`} alt="Avatar" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            ) : (
+              user?.username?.slice(0, 2).toUpperCase()
+            )}
+          </div>
+          <div>
+            <input type="file" accept="image/png, image/jpeg, image/webp" ref={fileInputRef} style={{ display: "none" }} onChange={handleAvatarSelect} />
+            <button onClick={() => fileInputRef.current?.click()} disabled={uploadingAvatar} className="btn btn-ghost" style={{ fontSize: 12.5, padding: "6px 14px" }}>
+              {uploadingAvatar ? "Uploading…" : "Change picture"}
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* Display name */}
       <div style={row}>
         <div style={{ flex: 1 }}>

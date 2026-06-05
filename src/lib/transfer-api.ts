@@ -26,6 +26,17 @@ export async function listTransfers(nodeId: string): Promise<{ transfers: Transf
   return data;
 }
 
+export async function getTransferActivity(nodeId: string): Promise<{ days: { date: string; transfer_count: number }[] }> {
+  const { data } = await api.get(`/v1/node-transfers/${nodeId}/activity`);
+  return data;
+}
+
+export async function getTransferSpeed(nodeId: string): Promise<{ bytes_per_sec: number; active_transfers: number }> {
+  const { data } = await api.get(`/v1/node-transfers/${nodeId}/speed`);
+  return data;
+}
+
+
 export async function cancelTransfer(transferId: string, reason?: string): Promise<CancelTransferResponse> {
   const { data } = await api.post(`/v1/transfers/${transferId}/cancel`, { reason: reason || "" });
   return data;

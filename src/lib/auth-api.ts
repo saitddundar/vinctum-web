@@ -46,3 +46,13 @@ export async function changePassword(currentPassword: string, newPassword: strin
   const { data } = await api.post("/v1/auth/change-password", { current_password: currentPassword, new_password: newPassword });
   return data;
 }
+
+export async function updateAvatar(avatarData: string): Promise<void> {
+  await api.put("/v1/profile/avatar", { avatar_data: avatarData });
+}
+
+export async function getAvatar(userId: string): Promise<{ avatar_data: string }> {
+  const { data } = await api.get(`/v1/profile/${userId}/avatar`);
+  return data;
+}
+

@@ -7,7 +7,10 @@ import { normalizeDeviceType } from "../types/device";
 import type { Device, PeerSession } from "../types/device";
 import type { TransferInfo } from "../types/transfer";
 import NetworkMesh from "../components/NetworkMesh";
+import ActivityHeatmap from "../components/ActivityHeatmap";
 import { Monitor, Smartphone, Tablet, Server, ArrowRight, Check, Users, Send, Shield, QrCode } from "lucide-react";
+import { getTransferActivity, getTransferSpeed } from "../lib/transfer-api";
+
 
 function timeAgo(iso: string) {
   if (!iso) return "never";
@@ -54,7 +57,10 @@ export default function Dashboard() {
   const [devices,   setDevices]   = useState<Device[]>([]);
   const [sessions,  setSessions]  = useState<PeerSession[]>([]);
   const [transfers, setTransfers] = useState<TransferInfo[]>([]);
+  const [activityDays, setActivityDays] = useState<{ date: string; transfer_count: number }[]>([]);
+  const [speed, setSpeed] = useState<{ bytes_per_sec: number; active_transfers: number }>({ bytes_per_sec: 0, active_transfers: 0 });
   const [loading,   setLoading]   = useState(true);
+
 
   useEffect(() => {
     Promise.all([
@@ -67,12 +73,28 @@ export default function Dashboard() {
       const approved = devs.find((d: Device) => d.is_approved && !d.is_revoked && d.node_id);
       if (approved) {
         try {
-          const txRes = await listTransfers(approved.node_id);
+          const [txRes, actRes, speedRes] = await Promise.all([
+            listTransfers(approved.node_id),
+            getTransferActivity(approved.node_id).catch(() => ({ days: [] })),
+            getTransferSpeed(approved.node_id).catch(() => ({ bytes_per_sec: 0, active_transfers: 0 }))
+          ]);
           setTransfers(txRes.transfers || []);
+          setActivityDays(actRes.days || []);
+          setSpeed(speedRes);
         } catch {}
       }
     }).finally(() => setLoading(false));
   }, []);
+
+  // Poll speed every 10s
+  useEffect(() => {
+    const approved = devices.find(d => d.is_approved && !d.is_revoked && d.node_id);
+    if (!approved) return;
+    const timer = setInterval(() => {
+      getTransferSpeed(approved.node_id).then(setSpeed).catch(() => {});
+    }, 10000);
+    return () => clearInterval(timer);
+  }, [devices]);
 
   const approved    = devices.filter(d => d.is_approved && !d.is_revoked);
   const pending     = devices.filter(d => !d.is_approved && !d.is_revoked);
@@ -105,12 +127,19 @@ export default function Dashboard() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {speed.bytes_per_sec > 0 && (
+            <span style={{ fontSize: 12, color: "var(--warning)", marginRight: 8, fontWeight: 500 }}>
+              {formatBytes(speed.bytes_per_sec)}/s
+            </span>
+          )}
           <span className="live-dot" />
           <span style={{ fontSize: 12, color: "var(--fg-2)" }}>
             {inFlight.length > 0 ? `${inFlight.length} transfer${inFlight.length !== 1 ? "s" : ""} in progress` : "mesh idle"}
           </span>
         </div>
       </div>
+
+      <ActivityHeatmap days={activityDays} />
 
       {/* Active transfers — only shown if something is happening */}
       {inFlight.length > 0 && (

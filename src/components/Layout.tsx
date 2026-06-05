@@ -19,7 +19,7 @@ const NAV = [
 ];
 
 export default function Layout() {
-  const { user, logout } = useAuth();
+  const { user, logout, avatarBase64 } = useAuth();
   const { counts } = useNotifications();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
@@ -122,12 +122,17 @@ export default function Layout() {
         <div style={{ borderTop: "1px solid var(--line)", padding: "12px 10px", display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{
             width: 30, height: 30, borderRadius: 99,
-            background: "oklch(0.78 0.15 160 / .15)",
-            border: "1px solid oklch(0.78 0.15 160 / .3)",
+            background: avatarBase64 ? "transparent" : "oklch(0.78 0.15 160 / .15)",
+            border: avatarBase64 ? "1px solid var(--line)" : "1px solid oklch(0.78 0.15 160 / .3)",
             display: "flex", alignItems: "center", justifyContent: "center",
             fontSize: 11, fontWeight: 600, color: "var(--accent)", flexShrink: 0,
+            overflow: "hidden",
           }}>
-            {user?.username?.slice(0, 2).toUpperCase() ?? "??"}
+            {avatarBase64 ? (
+              <img src={`data:image/jpeg;base64,${avatarBase64}`} alt="Avatar" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            ) : (
+              user?.username?.slice(0, 2).toUpperCase() ?? "??"
+            )}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 12, color: "var(--fg)", fontWeight: 500, lineHeight: 1.3 }}>{user?.username}</div>

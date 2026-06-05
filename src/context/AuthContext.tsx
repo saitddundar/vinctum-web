@@ -8,11 +8,13 @@ import {
 } from "react";
 import api from "../lib/api";
 import * as authApi from "../lib/auth-api";
+import { sendHeartbeat } from "../lib/presence-api";
 import type { User, LoginRequest, RegisterRequest } from "../types/auth";
 
 interface AuthState {
   user: User | null;
   accessToken: string | null;
+  avatarBase64: string | null;
   loading: boolean;
 }
 
@@ -20,6 +22,7 @@ interface AuthContextValue extends AuthState {
   login: (req: LoginRequest) => Promise<void>;
   register: (req: RegisterRequest) => Promise<void>;
   logout: () => void;
+  setAvatar: (base64: string) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -34,8 +37,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({
     user: null,
     accessToken: null,
+    avatarBase64: null,
     loading: true,
   });
+
+  const fetchAvatar = useCallback(async (userId: string) => {
+    try {
+      const res = await authApi.getAvatar(userId);
+      if (res.avatar_data) {
+        setState(s => ({ ...s, avatarBase64: res.avatar_data }));
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
 
   // Restore session from localStorage on mount
   useEffect(() => {
@@ -45,10 +60,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (accessToken && userJson) {
       try {
         const user = JSON.parse(userJson) as User;
-        setState({ user, accessToken, loading: false });
+        setState({ user, accessToken, avatarBase64: null, loading: false });
+        fetchAvatar(user.user_id);
       } catch {
         clearStorage();
-        setState({ user: null, accessToken: null, loading: false });
+        setState({ user: null, accessToken: null, avatarBase64: null, loading: false });
       }
     } else {
       setState((s) => ({ ...s, loading: false }));
@@ -82,7 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               return api(original);
             } catch {
               clearStorage();
-              setState({ user: null, accessToken: null, loading: false });
+              setState({ user: null, accessToken: null, avatarBase64: null, loading: false });
             }
           }
         }
@@ -96,13 +112,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // Presence heartbeat
+  useEffect(() => {
+    if (!state.accessToken || !state.user) return;
+    
+    let deviceId = sessionStorage.getItem("vinctum_web_device_id");
+    if (!deviceId) {
+      deviceId = "web-" + crypto.randomUUID();
+      sessionStorage.setItem("vinctum_web_device_id", deviceId);
+    }
+    
+    // Initial heartbeat
+    sendHeartbeat(deviceId).catch(() => {});
+    
+    // Interval every 20s
+    const timer = setInterval(() => {
+      sendHeartbeat(deviceId as string).catch(() => {});
+    }, 20000);
+    
+    return () => clearInterval(timer);
+  }, [state.accessToken, state.user]);
+
   const login = useCallback(async (req: LoginRequest) => {
     const data = await authApi.login(req);
     localStorage.setItem(STORAGE_KEYS.accessToken, data.access_token);
     localStorage.setItem(STORAGE_KEYS.refreshToken, data.refresh_token);
     localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(data.user));
-    setState({ user: data.user, accessToken: data.access_token, loading: false });
-  }, []);
+    setState({ user: data.user, accessToken: data.access_token, avatarBase64: null, loading: false });
+    fetchAvatar(data.user.user_id);
+  }, [fetchAvatar]);
 
   const register = useCallback(async (req: RegisterRequest) => {
     await authApi.register(req);
@@ -110,11 +148,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(() => {
     clearStorage();
-    setState({ user: null, accessToken: null, loading: false });
+    setState({ user: null, accessToken: null, avatarBase64: null, loading: false });
+  }, []);
+
+  const setAvatar = useCallback((base64: string) => {
+    setState(s => ({ ...s, avatarBase64: base64 }));
   }, []);
 
   return (
-    <AuthContext.Provider value={{ ...state, login, register, logout }}>
+    <AuthContext.Provider value={{ ...state, login, register, logout, setAvatar }}>
       {children}
     </AuthContext.Provider>
   );
