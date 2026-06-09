@@ -213,8 +213,8 @@ export default function Layout() {
         </header>
 
         {/* Page content */}
-        <main style={{ flex: 1, padding: "40px", display: "flex", justifyContent: "center" }}>
-          <div style={{ width: "100%", maxWidth: 1100, minWidth: 0 }}>
+        <main style={{ flex: 1, padding: "40px 48px", width: "100%", minWidth: 0 }}>
+          <div style={{ maxWidth: 1100, width: "100%", margin: "0 auto" }}>
             <Outlet />
           </div>
         </main>
