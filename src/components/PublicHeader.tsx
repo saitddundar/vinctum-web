@@ -10,7 +10,6 @@ export default function PublicHeader() {
       <div style={{ maxWidth: 1160, margin: "0 auto", padding: "0 40px", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div className="flex items-center gap-8">
           <Link to="/" className="flex items-center gap-2" style={{ fontWeight: 600, fontSize: 15, letterSpacing: "-0.02em", textDecoration: "none", color: "var(--fg)" }}>
-            <span className="logo-mark" />
             vinctum
           </Link>
           <nav className="hidden md:flex items-center gap-6">

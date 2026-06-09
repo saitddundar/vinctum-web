@@ -70,7 +70,6 @@ export default function Layout() {
           style={{ padding: "22px 20px 18px", borderBottom: "1px solid var(--line)" }}
         >
           <Link to="/" className="flex items-center gap-2" style={{ textDecoration: "none" }}>
-            <span className="logo-mark" />
             <span style={{ fontSize: 15, fontWeight: 600, letterSpacing: "-0.02em", color: "var(--fg)" }}>
               vinctum
             </span>

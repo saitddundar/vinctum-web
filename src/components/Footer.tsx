@@ -5,9 +5,9 @@ export default function Footer() {
     <footer style={{ borderTop: "1px solid var(--line)", padding: "56px 40px 32px", background: "oklch(0.13 0.012 235)" }}>
       <div style={{ maxWidth: 1160, margin: "0 auto" }}>
         <div style={{ display: "grid", gridTemplateColumns: "1.4fr repeat(4,1fr)", gap: 40, paddingBottom: 40, borderBottom: "1px solid var(--line)" }}>
-          <div>
-            <Link to="/" className="flex items-center gap-2" style={{ fontWeight: 600, fontSize: 15, letterSpacing: "-0.02em", textDecoration: "none", color: "var(--fg)" }}>
-              <span className="logo-mark" />vinctum
+          <div style={{ marginBottom: 20 }}>
+            <Link to="/" className="flex items-center gap-2" style={{ fontWeight: 600, fontSize: 16, letterSpacing: "-0.02em", color: "var(--fg)", textDecoration: "none" }}>
+              vinctum
             </Link>
             <p style={{ fontSize: 13, color: "var(--muted)", marginTop: 14, lineHeight: 1.6, maxWidth: 240 }}>Zero-knowledge file transfer between your own devices. Built in Istanbul.</p>
           </div>

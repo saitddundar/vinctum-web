@@ -16,10 +16,11 @@ export default function AdminLayout() {
       <aside style={{ width: 220, background: "oklch(0.148 0.012 235)", borderRight: "1px solid var(--line)", display: "flex", flexDirection: "column" }}>
         {/* Header */}
         <div style={{ padding: "18px 16px 14px", borderBottom: "1px solid var(--line)" }}>
-          <div className="flex items-center gap-2" style={{ marginBottom: 12 }}>
-            <span className="logo-mark" />
-            <span style={{ fontWeight: 600, fontSize: 15, letterSpacing: "-0.02em" }}>vinctum</span>
-          </div>
+          <Link to="/" className="flex items-center gap-2" style={{ textDecoration: "none", marginBottom: 12 }}>
+            <span style={{ fontSize: 15, fontWeight: 600, letterSpacing: "-0.02em", color: "var(--fg)" }}>
+              vinctum
+            </span>
+          </Link>
           <span className="pill pill-warn" style={{ fontSize: 9 }}>ADMIN</span>
         </div>
 

@@ -81,7 +81,6 @@ export default function Account() {
           height: 54, display: "flex", alignItems: "center", justifyContent: "space-between",
         }}>
           <Link to="/" style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}>
-            <span className="logo-mark" />
             <span style={{ fontSize: 15, fontWeight: 600, letterSpacing: "-0.02em", color: "var(--fg)" }}>
               vinctum
             </span>

@@ -14,7 +14,6 @@ export function AuthShell({ title, subtitle, children, side, footer }: AuthShell
       {/* Form side */}
       <div className="flex flex-col" style={{ flex: "0 0 480px", padding: "48px 56px", background: "var(--bg)", minHeight: "100vh" }}>
         <Link to="/" className="flex items-center gap-2" style={{ textDecoration: "none", marginBottom: 48 }}>
-          <span className="logo-mark" />
           <span style={{ fontSize: 15, fontWeight: 600, letterSpacing: "-0.02em", color: "var(--fg)" }}>vinctum</span>
         </Link>
         <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", maxWidth: 380, width: "100%" }}>
