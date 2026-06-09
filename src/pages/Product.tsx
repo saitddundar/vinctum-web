@@ -3,15 +3,26 @@ import { ArrowRight, Monitor, Smartphone, Laptop, Server, Zap, Globe, Shield, Ne
 import PublicHeader from "../components/PublicHeader";
 import Footer from "../components/Footer";
 
+import ScrollSpy from "../components/ScrollSpy";
+
 export default function Product() {
+  const spySections = [
+    { id: "hero", label: "Product" },
+    { id: "architecture", label: "Architecture" },
+    { id: "usecases", label: "Use cases" },
+    { id: "devices", label: "Devices" },
+    { id: "opensource", label: "Open source" }
+  ];
+
   return (
     <div className="min-h-screen" style={{ background: "var(--bg)", color: "var(--fg)" }}>
       <PublicHeader />
-      <Hero />
-      <Architecture />
-      <UseCases />
-      <DeviceSupport />
-      <OpenSource />
+      <ScrollSpy sections={spySections} />
+      <div id="section-hero"><Hero /></div>
+      <div id="section-architecture"><Architecture /></div>
+      <div id="section-usecases"><UseCases /></div>
+      <div id="section-devices"><DeviceSupport /></div>
+      <div id="section-opensource"><OpenSource /></div>
       <Footer />
     </div>
   );

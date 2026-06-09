@@ -4,15 +4,26 @@ import { useState } from "react";
 import PublicHeader from "../components/PublicHeader";
 import Footer from "../components/Footer";
 
+import ScrollSpy from "../components/ScrollSpy";
+
 export default function Pricing() {
+  const spySections = [
+    { id: "hero", label: "Pricing" },
+    { id: "tiers", label: "Tiers" },
+    { id: "compare", label: "Compare" },
+    { id: "faq", label: "FAQ" },
+    { id: "cta", label: "Get started" }
+  ];
+
   return (
     <div className="min-h-screen" style={{ background: "var(--bg)", color: "var(--fg)" }}>
       <PublicHeader />
-      <Hero />
-      <Tiers />
-      <Comparison />
-      <FAQ />
-      <CTA />
+      <ScrollSpy sections={spySections} />
+      <div id="section-hero"><Hero /></div>
+      <div id="section-tiers"><Tiers /></div>
+      <div id="section-compare"><Comparison /></div>
+      <div id="section-faq"><FAQ /></div>
+      <div id="section-cta"><CTA /></div>
       <Footer />
     </div>
   );

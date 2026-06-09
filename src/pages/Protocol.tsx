@@ -3,16 +3,28 @@ import { ArrowRight, Shield, Lock, Key, Layers, Wifi, FileCheck } from "lucide-r
 import PublicHeader from "../components/PublicHeader";
 import Footer from "../components/Footer";
 
+import ScrollSpy from "../components/ScrollSpy";
+
 export default function Protocol() {
+  const spySections = [
+    { id: "hero", label: "Protocol" },
+    { id: "keyexchange", label: "Key exchange" },
+    { id: "transfer", label: "Transfer" },
+    { id: "transport", label: "Transport" },
+    { id: "handshake", label: "Handshake" },
+    { id: "cta", label: "Verify" }
+  ];
+
   return (
     <div className="min-h-screen" style={{ background: "var(--bg)", color: "var(--fg)" }}>
       <PublicHeader />
-      <Hero />
-      <KeyExchange />
-      <TransferProtocol />
-      <TransportLayer />
-      <Handshake />
-      <CTA />
+      <ScrollSpy sections={spySections} />
+      <div id="section-hero"><Hero /></div>
+      <div id="section-keyexchange"><KeyExchange /></div>
+      <div id="section-transfer"><TransferProtocol /></div>
+      <div id="section-transport"><TransportLayer /></div>
+      <div id="section-handshake"><Handshake /></div>
+      <div id="section-cta"><CTA /></div>
       <Footer />
     </div>
   );

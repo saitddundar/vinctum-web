@@ -6,31 +6,7 @@ import PublicHeader from "../components/PublicHeader";
 import Footer from "../components/Footer";
 import { getPlatformStats, type PlatformStats } from "../lib/api";
 
-export default function Home() {
-  const { user } = useAuth();
-  const signedIn = !!user;
-  const [stats, setStats] = useState<PlatformStats | null>(null);
-
-  useEffect(() => {
-    getPlatformStats().then(setStats).catch(() => {});
-  }, []);
-
-  return (
-    <div className="min-h-screen" style={{ background: "var(--bg)", color: "var(--fg)" }}>
-      <PublicHeader />
-      <ScrollSpy />
-      <div id="section-hero"><Hero signedIn={signedIn} /></div>
-      <div id="section-narrative"><Narrative /></div>
-      <div id="section-how"><HowItWorks /></div>
-      <div id="section-protocol"><ProtocolSection /></div>
-      <div id="section-features"><Features /></div>
-      <div id="section-stats"><ByTheNumbers stats={stats} /></div>
-      <div id="section-pricing"><PricingSection /></div>
-      <div id="section-cta"><ClosingCTA /></div>
-      <Footer />
-    </div>
-  );
-}
+import ScrollSpy from "../components/ScrollSpy";
 
 const SPY_SECTIONS = [
   { id: "hero", label: "Intro" },
@@ -43,45 +19,28 @@ const SPY_SECTIONS = [
   { id: "cta", label: "Get started" }
 ];
 
-function ScrollSpy() {
-  const [active, setActive] = useState(0);
+export default function Home() {
+  const { user } = useAuth();
+  const signedIn = !!user;
+  const [stats, setStats] = useState<PlatformStats | null>(null);
 
   useEffect(() => {
-    const handleScroll = () => {
-      const scrollPos = window.scrollY + window.innerHeight / 2.5;
-      let current = 0;
-      SPY_SECTIONS.forEach((s, i) => {
-        const el = document.getElementById(`section-${s.id}`);
-        if (el && el.offsetTop <= scrollPos) {
-          current = i;
-        }
-      });
-      setActive(current);
-    };
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    handleScroll();
-    return () => window.removeEventListener("scroll", handleScroll);
+    getPlatformStats().then(setStats).catch(() => {});
   }, []);
 
   return (
-    <div className="hidden md:flex flex-col" style={{ position: "fixed", right: 32, top: "50%", transform: "translateY(-50%)", zIndex: 50, gap: 12 }}>
-      {SPY_SECTIONS.map((s, i) => (
-        <button
-          key={s.id}
-          onClick={() => document.getElementById(`section-${s.id}`)?.scrollIntoView({ behavior: "smooth" })}
-          style={{
-            width: i === active ? 24 : 14, 
-            height: 2, 
-            background: i === active ? "var(--fg)" : "var(--muted)", 
-            border: "none", cursor: "pointer", 
-            transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-            padding: 0, margin: "0 0 0 auto",
-            opacity: i === active ? 1 : 0.3,
-            borderRadius: 2
-          }}
-          title={s.label}
-        />
-      ))}
+    <div className="min-h-screen" style={{ background: "var(--bg)", color: "var(--fg)" }}>
+      <PublicHeader />
+      <ScrollSpy sections={SPY_SECTIONS} />
+      <div id="section-hero"><Hero signedIn={signedIn} /></div>
+      <div id="section-narrative"><Narrative /></div>
+      <div id="section-how"><HowItWorks /></div>
+      <div id="section-protocol"><ProtocolSection /></div>
+      <div id="section-features"><Features /></div>
+      <div id="section-stats"><ByTheNumbers stats={stats} /></div>
+      <div id="section-pricing"><PricingSection /></div>
+      <div id="section-cta"><ClosingCTA /></div>
+      <Footer />
     </div>
   );
 }

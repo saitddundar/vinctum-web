@@ -2,15 +2,26 @@ import { ArrowRight, Terminal, Book, Server, Code, Zap, Shield, FileText } from 
 import PublicHeader from "../components/PublicHeader";
 import Footer from "../components/Footer";
 
+import ScrollSpy from "../components/ScrollSpy";
+
 export default function Docs() {
+  const spySections = [
+    { id: "hero", label: "Docs" },
+    { id: "quickstart", label: "Quick start" },
+    { id: "sections", label: "Topics" },
+    { id: "api", label: "API Reference" },
+    { id: "selfhost", label: "Self-Hosting" }
+  ];
+
   return (
     <div className="min-h-screen" style={{ background: "var(--bg)", color: "var(--fg)" }}>
       <PublicHeader />
-      <Hero />
-      <QuickStart />
-      <Sections />
-      <APIReference />
-      <SelfHost />
+      <ScrollSpy sections={spySections} />
+      <div id="section-hero"><Hero /></div>
+      <div id="section-quickstart"><QuickStart /></div>
+      <div id="section-sections"><Sections /></div>
+      <div id="section-api"><APIReference /></div>
+      <div id="section-selfhost"><SelfHost /></div>
       <Footer />
     </div>
   );
