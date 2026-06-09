@@ -6,13 +6,13 @@ export default function PublicHeader() {
   const signedIn = !!user;
 
   return (
-    <header style={{ borderBottom: "1px solid var(--line)", position: "sticky", top: 0, zIndex: 10, background: "oklch(0.155 0.012 235 / .85)", backdropFilter: "blur(12px)" }}>
-      <div style={{ maxWidth: 1160, margin: "0 auto", padding: "0 40px", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div className="flex items-center gap-8">
-          <Link to="/" className="flex items-center gap-2" style={{ fontWeight: 600, fontSize: 15, letterSpacing: "-0.02em", textDecoration: "none", color: "var(--fg)" }}>
+    <div style={{ position: "sticky", top: 24, zIndex: 50, padding: "0 24px", display: "flex", justifyContent: "center", pointerEvents: "none" }}>
+      <header style={{ width: "100%", maxWidth: 1160, height: 60, background: "oklch(0.14 0.012 235 / .85)", backdropFilter: "blur(16px)", border: "1px solid var(--line)", borderRadius: 99, padding: "0 12px 0 24px", display: "flex", alignItems: "center", justifyContent: "space-between", pointerEvents: "auto", boxShadow: "0 20px 40px -10px rgba(0,0,0,0.5)" }}>
+        <div className="flex items-center gap-10">
+          <Link to="/" className="flex items-center gap-2" style={{ fontWeight: 600, fontSize: 16, letterSpacing: "-0.02em", textDecoration: "none", color: "var(--fg)" }}>
             vinctum
           </Link>
-          <nav className="hidden md:flex items-center gap-6">
+          <nav className="hidden md:flex items-center gap-7">
             {[
               { label: "Product", to: "/product" },
               { label: "Protocol", to: "/protocol" },
@@ -20,33 +20,33 @@ export default function PublicHeader() {
               { label: "Pricing", to: "/pricing" },
               { label: "Docs", to: "/docs" },
             ].map(l => (
-              <Link key={l.label} to={l.to} style={{ fontSize: 13, color: "var(--muted)", fontWeight: 450, textDecoration: "none", transition: "color 0.15s" }}
-                onMouseEnter={e => (e.currentTarget.style.color = "var(--fg-2)")}
+              <Link key={l.label} to={l.to} style={{ fontSize: 13.5, color: "var(--muted)", fontWeight: 450, textDecoration: "none", transition: "color 0.15s" }}
+                onMouseEnter={e => (e.currentTarget.style.color = "var(--fg)")}
                 onMouseLeave={e => (e.currentTarget.style.color = "var(--muted)")}>
                 {l.label}
               </Link>
             ))}
           </nav>
         </div>
-        <div className="flex items-center gap-3">
-          <span style={{ fontSize: 11, color: "var(--muted)" }}>
+        <div className="flex items-center gap-2">
+          <span className="hidden lg:inline-block" style={{ fontSize: 11, color: "var(--muted)", marginRight: 12 }}>
             <span style={{ color: "var(--accent)", marginRight: 5 }}>●</span>all systems operational
           </span>
           {signedIn ? (
             <>
-              <Link to="/dashboard" className="btn btn-ghost" style={{ padding: "7px 13px", fontSize: 12 }}>Dashboard</Link>
-              <Link to="/account" style={{ width: 28, height: 28, borderRadius: 99, background: "linear-gradient(135deg,var(--accent),var(--cyan))", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#06170f", textDecoration: "none", cursor: "pointer" }}>
+              <Link to="/dashboard" className="btn btn-ghost" style={{ padding: "8px 16px", fontSize: 13, borderRadius: 99 }}>Dashboard</Link>
+              <Link to="/account" style={{ width: 34, height: 34, borderRadius: 99, background: "linear-gradient(135deg,var(--accent),var(--cyan))", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: "#06170f", textDecoration: "none", cursor: "pointer", marginLeft: 4 }}>
                 {user?.username?.slice(0, 2).toUpperCase()}
               </Link>
             </>
           ) : (
             <>
-              <Link to="/login" className="btn btn-ghost" style={{ padding: "7px 13px", fontSize: 12 }}>Sign in</Link>
-              <Link to="/register" className="btn btn-primary" style={{ padding: "7px 13px", fontSize: 12 }}>Get started</Link>
+              <Link to="/login" className="btn btn-ghost" style={{ padding: "8px 16px", fontSize: 13, borderRadius: 99 }}>Sign in</Link>
+              <Link to="/register" className="btn btn-primary" style={{ padding: "8px 20px", fontSize: 13, borderRadius: 99 }}>Get started</Link>
             </>
           )}
         </div>
-      </div>
-    </header>
+      </header>
+    </div>
   );
 }
