@@ -34,7 +34,7 @@ export default function Home() {
 
 function Hero({ signedIn }: { signedIn: boolean }) {
   return (
-    <section className="mesh-bg grid-bg" style={{ padding: "120px 40px 100px", position: "relative", overflow: "hidden" }}>
+    <section className="mesh-bg grid-bg" style={{ padding: "60px 40px 100px", position: "relative", overflow: "hidden" }}>
       <div style={{ maxWidth: 1160, margin: "0 auto", position: "relative", zIndex: 2 }}>
         <div style={{ display: "grid", gridTemplateColumns: "1.1fr 1fr", gap: 80, alignItems: "center" }}>
           <div>
@@ -90,7 +90,7 @@ function HeroCard() {
       <div className="flex justify-between items-center" style={{ marginBottom: 14 }}>
         <div className="flex items-center gap-2">
           <span className="live-dot" />
-          <span style={{ fontSize: 11, color: "var(--fg-2)" }}>mesh.sait.vinctum</span>
+          <span style={{ fontSize: 11, color: "var(--fg-2)" }}>Live network</span>
         </div>
         <span className="font-mono" style={{ fontSize: 10, color: "var(--muted-2)" }}>18ms avg</span>
       </div>
@@ -160,37 +160,128 @@ function Narrative() {
   );
 }
 
+const ISO_LAYERS = [
+  {
+    n: "01", t: "Authenticate",
+    d: "Ed25519 keypair generated on-device. Private key never leaves. Your identity is cryptographically bound to hardware.",
+    bg: "#064e3b", ext: "#022c22", color: "#34d399", icon: Shield // Emerald
+  },
+  {
+    n: "02", t: "Pair",
+    d: "A 6-digit ephemeral code exchanges public keys between devices. Valid for 60 seconds. No server involved.",
+    bg: "#082f49", ext: "#041f33", color: "#38bdf8", icon: Network // Sky
+  },
+  {
+    n: "03", t: "Transfer",
+    d: "X25519 ECDH derives a per-file session key. The file is split into 256 KB chunks, each encrypted with AES-256-GCM.",
+    bg: "#78350f", ext: "#451a03", color: "#fbbf24", icon: Lock // Amber
+  },
+  {
+    n: "04", t: "Verify",
+    d: "A Merkle tree is computed over the ciphertext. The root is signed by the sender's key. Receiver validates before decrypting.",
+    bg: "#4c1d95", ext: "#2e1065", color: "#c084fc", icon: Check // Purple
+  }
+];
+
+function getExtrusion(color: string) {
+  let shadow = "";
+  // Greatly reduced step count for 60fps performance
+  for(let i=1; i<=10; i++) {
+    shadow += `-${i}px ${i}px 0 ${color}${i === 10 ? "" : ", "}`;
+  }
+  // Hard shadow on the floor instead of a massive 50px blur, which was killing rendering speed
+  shadow += `, -20px 20px 0 rgba(0,0,0,0.4)`;
+  return shadow;
+}
+
 function HowItWorks() {
+  const [hovered, setHovered] = useState<number | null>(null);
+
+  const activeLayer = hovered !== null ? ISO_LAYERS[hovered] : ISO_LAYERS[3];
+
   return (
-    <section style={{ padding: "100px 40px", borderTop: "1px solid var(--line)", background: "oklch(0.14 0.012 235)" }}>
-      <div style={{ maxWidth: 1160, margin: "0 auto" }}>
-        <div style={{ textAlign: "center", marginBottom: 56 }}>
-          <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: ".12em", color: "var(--accent)", marginBottom: 14 }}>How it works</div>
-          <h2 style={{ fontSize: 40, fontWeight: 500, letterSpacing: "-0.025em", lineHeight: 1.05, margin: 0 }}>
-            Four steps. <span className="font-serif" style={{ color: "var(--fg-2)" }}>One mesh.</span>
+    <section style={{ padding: "110px 40px", borderTop: "1px solid var(--line)", background: "oklch(0.14 0.012 235)", overflow: "hidden" }}>
+      <div style={{ maxWidth: 1100, margin: "0 auto", display: "grid", gridTemplateColumns: "1fr 500px", gap: 80, alignItems: "center" }}>
+        
+        {/* Left Text */}
+        <div style={{ paddingRight: 40 }}>
+          <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: ".12em", color: "var(--accent)", marginBottom: 20 }}>How it works</div>
+          <h2 style={{ fontSize: 44, fontWeight: 500, letterSpacing: "-0.025em", lineHeight: 1.05, margin: 0, marginBottom: 40 }}>
+            Four layers. <br/><span className="font-serif" style={{ color: "var(--fg-2)" }}>One mesh.</span>
           </h2>
-        </div>
-        <div className="glass-card-static" style={{ padding: 0, overflow: "hidden" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)" }}>
-            {[
-              { n:"01", t:"Authenticate", d:"Ed25519 keypair per device, bound to your root identity.", icon: Shield },
-              { n:"02", t:"Pair",         d:"6-digit ephemeral code binds public keys between devices.", icon: Network },
-              { n:"03", t:"Transfer",     d:"X25519 ECDH session key per file. AES-256-GCM, 256KB chunks.", icon: Lock },
-              { n:"04", t:"Verify",       d:"Merkle root signed by sender, validated on arrival.", icon: Check },
-            ].map((s, i) => (
-              <div key={s.n} style={{ padding: "28px 24px", borderLeft: i > 0 ? "1px solid var(--line)" : "none" }}>
-                <div className="flex items-center gap-3" style={{ marginBottom: 14 }}>
-                  <div style={{ width: 34, height: 34, borderRadius: 9, background: "oklch(0.78 0.15 160 / .08)", border: "1px solid oklch(0.78 0.15 160 / .2)", color: "var(--accent)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <s.icon size={15} />
-                  </div>
-                  <span className="font-mono" style={{ fontSize: 10, color: "var(--muted-2)" }}>{s.n}</span>
-                </div>
-                <div style={{ fontSize: 16, fontWeight: 500, letterSpacing: "-0.01em" }}>{s.t}</div>
-                <p style={{ fontSize: 13, color: "var(--fg-2)", marginTop: 8, lineHeight: 1.55 }}>{s.d}</p>
-              </div>
-            ))}
+          
+          <div style={{ 
+            padding: "32px", borderRadius: 16, 
+            background: "oklch(1 0 0 / .02)", border: "1px solid var(--line)",
+            minHeight: 180, transition: "border-color 0.4s"
+          }}>
+             <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 16 }}>
+               <div style={{ 
+                 fontFamily: "JetBrains Mono, monospace", fontSize: 12, fontWeight: 700,
+                 color: activeLayer.color, background: "oklch(1 0 0 / .08)",
+                 padding: "4px 10px", borderRadius: 6, transition: "color 0.3s"
+               }}>
+                 {activeLayer.n}
+               </div>
+               <div style={{ fontSize: 20, fontWeight: 500, color: "var(--fg)" }}>
+                 {activeLayer.t}
+               </div>
+             </div>
+             <p style={{ fontSize: 15, lineHeight: 1.6, color: "var(--fg-2)", margin: 0 }}>
+               {activeLayer.d}
+             </p>
           </div>
         </div>
+
+        {/* Right Isometric Stack */}
+        <div style={{ height: 480, display: "flex", alignItems: "center", justifyContent: "center", perspective: 1400 }}>
+          {/* marginTop 120px perfectly counters the local translateZ upward visual shift (Z*sin(60)) */}
+          <div style={{ position: "relative", width: 280, height: 280, marginTop: 120, transformStyle: "preserve-3d", transform: "rotateX(60deg) rotateZ(-45deg)" }}>
+            {ISO_LAYERS.map((layer, i) => {
+              const isHovered = hovered === i;
+              const isAboveHovered = hovered !== null && i > hovered;
+              
+              // Base spacing 90px
+              const baseZ = i * 90;
+              // Expand when hovered
+              const pushUp = isHovered ? 30 : (isAboveHovered ? 45 : 0);
+              const z = baseZ + pushUp;
+
+              return (
+                <div
+                  key={i}
+                  onMouseEnter={() => setHovered(i)}
+                  onMouseLeave={() => setHovered(null)}
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    borderRadius: 44,
+                    background: layer.bg,
+                    boxShadow: getExtrusion(layer.ext),
+                    transform: `translateZ(${z}px)`,
+                    // Use a slightly faster transition for snappier feel
+                    transition: "all 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), filter 0.35s",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    border: `1px solid ${layer.color}30`,
+                    zIndex: i,
+                    willChange: "transform", // Hardware acceleration hint
+                    filter: isHovered ? "brightness(1.15) saturate(1.15)" : "brightness(1) saturate(1)",
+                  }}
+                >
+                  <layer.icon size={96} color={layer.color} strokeWidth={1.5} style={{ 
+                    opacity: isHovered ? 1 : 0.6, 
+                    transition: "opacity 0.3s",
+                    transform: "translateZ(1px)"
+                  }} />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
       </div>
     </section>
   );
