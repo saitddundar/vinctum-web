@@ -7,7 +7,7 @@ export default function PublicHeader() {
 
   return (
     <div style={{ position: "sticky", top: 24, zIndex: 50, padding: "0 24px", display: "flex", justifyContent: "center", pointerEvents: "none" }}>
-      <header style={{ width: "100%", maxWidth: 1160, height: 60, background: "oklch(0.14 0.012 235 / .85)", backdropFilter: "blur(16px)", border: "1px solid var(--line)", borderRadius: 99, padding: "0 12px 0 24px", display: "flex", alignItems: "center", justifyContent: "space-between", pointerEvents: "auto", boxShadow: "0 20px 40px -10px rgba(0,0,0,0.5)" }}>
+      <header style={{ width: "100%", maxWidth: 1160, height: 60, background: "oklch(0.14 0.012 235 / .85)", backdropFilter: "blur(16px)", border: "1px solid var(--line)", borderRadius: 16, padding: "0 12px 0 24px", display: "flex", alignItems: "center", justifyContent: "space-between", pointerEvents: "auto", boxShadow: "0 20px 40px -10px rgba(0,0,0,0.5)" }}>
         <div className="flex items-center gap-10">
           <Link to="/" className="flex items-center gap-2" style={{ fontWeight: 600, fontSize: 16, letterSpacing: "-0.02em", textDecoration: "none", color: "var(--fg)" }}>
             vinctum
